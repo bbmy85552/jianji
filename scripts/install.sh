@@ -8,6 +8,7 @@ FORCE_ENV=0
 YES=0
 APP_URL_ARG="${JIANJI_APP_URL:-}"
 COOKIE_SECURE_ARG="${JIANJI_COOKIE_SECURE:-}"
+SERVICE_NAME="${JIANJI_SERVICE_NAME:-jianji}"
 
 usage() {
   cat <<'USAGE'
@@ -183,6 +184,31 @@ write_deployment_metadata() {
   if ! grep -q '^JIANJI_UPDATE_COMMAND=' .env; then
     set_env_value JIANJI_UPDATE_COMMAND "${JIANJI_UPDATE_COMMAND:-}"
   fi
+  if ! grep -q '^JIANJI_UPDATE_ARCHIVE_URL=' .env; then
+    set_env_value JIANJI_UPDATE_ARCHIVE_URL "${JIANJI_UPDATE_ARCHIVE_URL:-}"
+  fi
+}
+
+wait_for_service() {
+  local id=""
+  local status=""
+  local attempt=0
+  echo "Waiting for $SERVICE_NAME to become healthy ..."
+  for attempt in {1..80}; do
+    id="$(compose ps -q "$SERVICE_NAME" 2>/dev/null || true)"
+    if [ "$id" != "" ]; then
+      status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || true)"
+      if [ "$status" = "healthy" ] || [ "$status" = "running" ]; then
+        echo "$SERVICE_NAME status: $status"
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  echo "$SERVICE_NAME did not become healthy in time." >&2
+  compose ps >&2 || true
+  compose logs --tail=80 "$SERVICE_NAME" >&2 || true
+  return 1
 }
 
 generate_secret() {
@@ -270,6 +296,7 @@ if [ -f ".env" ] && [ "$FORCE_ENV" -ne 1 ]; then
       write_setup_url_file "$(env_value APP_URL)" "$(env_value SETUP_TOKEN)"
       write_deployment_metadata
       compose up -d --build
+      wait_for_service
       echo "Jianji is running. Check: docker compose ps"
       if [ -f SETUP_URL.txt ]; then
         echo "Setup URL file: $(pwd)/SETUP_URL.txt"
@@ -321,6 +348,7 @@ write_setup_url_file "$APP_URL" "$SETUP_TOKEN"
 echo
 echo "Starting Jianji with Docker Compose ..."
 compose up -d --build
+wait_for_service
 
 echo
 echo "Jianji is deployed."

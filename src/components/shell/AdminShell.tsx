@@ -6,6 +6,7 @@ import { Toast } from './Toast';
 import { api } from '../../lib/api';
 import type { UserPreferences } from '../../lib/types';
 import { applyTheme, subscribeSystemThemeChange } from '../../lib/theme';
+import { applyLanguage } from '../../lib/i18n';
 
 const items = [
   { to: '/admin/users', label: '用户管理', icon: Users },
@@ -28,6 +29,7 @@ export function AdminShell() {
         if (!alive) return;
         const pref = data.preferences;
         applyTheme(pref);
+        applyLanguage(pref.language);
         if (pref.theme === 'system') {
           cleanupSystemTheme = subscribeSystemThemeChange(() => applyTheme(pref));
         }
@@ -35,6 +37,7 @@ export function AdminShell() {
       .catch(() => {
         if (!alive) return;
         applyTheme();
+        applyLanguage();
         cleanupSystemTheme = subscribeSystemThemeChange(() => applyTheme());
       });
     return () => {
@@ -51,8 +54,8 @@ export function AdminShell() {
             <ChevronLeft size={16} /> 返回工作台
           </Link>
           <div className="mb-3 flex items-center gap-3 md:mb-6">
-            <div className="w-8 h-8 bg-text-primary rounded-lg flex items-center justify-center">
-              <Shield size={16} className="text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-liquid-indigo/20 bg-liquid-indigo/10 text-liquid-indigo shadow-sm shadow-liquid-indigo/10">
+              <Shield size={17} />
             </div>
             <div className="text-sm font-semibold text-text-primary">管理后台</div>
           </div>
@@ -65,13 +68,13 @@ export function AdminShell() {
               className={({ isActive }) =>
                 `flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all md:w-full ${
                   isActive
-                    ? 'bg-liquid-indigo/10 text-liquid-indigo font-semibold'
-                    : 'text-text-secondary hover:bg-black/5'
+                    ? 'bg-liquid-indigo/10 text-liquid-indigo font-semibold ring-1 ring-liquid-indigo/20 shadow-sm shadow-liquid-indigo/5'
+                    : 'text-text-secondary hover:bg-black/5 hover:text-text-primary'
                 }`
               }
             >
-              <it.icon size={18} />
-              {it.label}
+              <it.icon size={18} className="shrink-0" />
+              <span>{it.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -82,7 +85,7 @@ export function AdminShell() {
               await logout();
               navigate('/login');
             }}
-            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-text-secondary hover:bg-black/5 rounded-xl transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-text-secondary hover:bg-black/5 hover:text-text-primary rounded-xl transition-colors"
           >
             <LogOut size={16} />
             退出

@@ -10,6 +10,7 @@ import {
   subscribeSystemThemeChange,
   THEME_COLOR_PRESETS,
 } from '../../lib/theme';
+import { applyLanguage } from '../../lib/i18n';
 
 type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -45,6 +46,7 @@ export function PreferencesPage() {
         lastSavedRef.current = JSON.stringify(next);
         setPref(next);
         applyTheme(next);
+        applyLanguage(next.language);
         loadedRef.current = true;
       } catch (err) {
         showToast(asApiError(err).error, 'error');
@@ -56,6 +58,7 @@ export function PreferencesPage() {
 
   useEffect(() => {
     applyTheme(pref);
+    applyLanguage(pref.language);
     if (pref.theme !== 'system') return undefined;
     return subscribeSystemThemeChange(() => applyTheme(pref));
   }, [pref]);
@@ -86,6 +89,7 @@ export function PreferencesPage() {
               : current,
           );
           applyTheme(next);
+          applyLanguage(next.language);
           setAutoSaveStatus('saved');
           showToast('偏好已自动保存', 'success');
         } catch (err) {

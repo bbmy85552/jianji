@@ -7,6 +7,7 @@ import { useUiStore } from '../../store/ui';
 import { api } from '../../lib/api';
 import type { UserPreferences } from '../../lib/types';
 import { applyTheme, subscribeSystemThemeChange } from '../../lib/theme';
+import { applyLanguage } from '../../lib/i18n';
 
 export function AppShell() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
@@ -23,6 +24,7 @@ export function AppShell() {
         if (!alive) return;
         const pref = data.preferences;
         applyTheme(pref);
+        applyLanguage(pref.language);
         if (pref.theme === 'system') {
           cleanupSystemTheme = subscribeSystemThemeChange(() => applyTheme(pref));
         }
@@ -30,6 +32,7 @@ export function AppShell() {
       .catch(() => {
         if (!alive) return;
         applyTheme();
+        applyLanguage();
         cleanupSystemTheme = subscribeSystemThemeChange(() => applyTheme());
       });
     return () => {
