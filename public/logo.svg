@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Jianji logo">
+  <defs>
+    <linearGradient id="card" x1="94" x2="418" y1="58" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C7AFF"/>
+      <stop offset=".56" stop-color="#5E5CE6"/>
+      <stop offset="1" stop-color="#2F7DFF"/>
+    </linearGradient>
+    <filter id="shadow" width="130%" height="130%" x="-15%" y="-10%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#101229" flood-opacity=".24"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#F7F8FC"/>
+  <rect x="96" y="68" width="320" height="376" rx="72" fill="url(#card)" filter="url(#shadow)"/>
+  <path fill="#fff" d="M164 156h184v36H164zm0 82h184v36H164zm0 82h118v36H164z" opacity=".95"/>
+  <path fill="#fff" d="M346 320c36 0 66 30 66 66s-30 66-66 66-66-30-66-66 30-66 66-66Zm0 32a34 34 0 1 0 0 68 34 34 0 0 0 0-68Z"/>
+</svg>

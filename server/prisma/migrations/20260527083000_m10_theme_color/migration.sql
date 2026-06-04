@@ -1,0 +1,1 @@
+ALTER TABLE "UserPreferences" ADD COLUMN "themeColor" TEXT NOT NULL DEFAULT '#5E5CE6';

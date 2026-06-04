@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+node_modules
+server/node_modules/
+server/node_modules
+
+# Build output
+dist/
+server/dist/
+coverage/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+SETUP_URL.txt
+server/.env
+server/.env.local
+server/.env.*.local
+!.env.example
+!server/.env.example
+certs/
+.acme.sh/
+*.pem
+*.key
+
+# SQLite databases and runtime data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+server/prisma/prisma/*.db
+server/prisma/prisma/*.db-journal
+server/prisma/*.db
+server/prisma/*.db-journal
+server/uploads/
+public/uploads/
+uploads/
+data/
+
+# Logs and diagnostics
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local development notes not intended for the public repository
+项目进度报告.md

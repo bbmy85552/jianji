@@ -1,0 +1,770 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ChevronLeft,
+  Trash2,
+  Users,
+  History,
+  Paperclip,
+  Download,
+  Upload,
+  Star,
+  MessageSquare,
+  CheckCircle2,
+} from 'lucide-react';
+import { api, asApiError, downloadFromApi, uploadFile } from '../../lib/api';
+import { useUiStore } from '../../store/ui';
+import { useAuthStore } from '../../store/auth';
+import { RichEditor, type RichEditorRef } from '../../editor/Editor';
+import type { Attachment, DocAccess, DocDetail, DocumentComment } from '../../lib/types';
+import { ShareDialog } from '../../components/ShareDialog';
+import { VersionDrawer } from '../../components/VersionDrawer';
+import { PresenceIndicator } from '../../components/PresenceIndicator';
+import { displayFilename } from '../../lib/filename';
+
+interface BuiltinFont {
+  family: string;
+  license: string;
+}
+
+interface UserFont {
+  id: string;
+  family: string;
+}
+
+function escapeHtml(s: string) {
+  return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] ?? ch);
+}
+
+function htmlWithAbsoluteImages(html: string) {
+  const box = document.createElement('div');
+  box.innerHTML = html;
+  box.querySelectorAll('img').forEach((img) => {
+    const src = img.getAttribute('src');
+    if (src?.startsWith('/')) img.setAttribute('src', `${window.location.origin}${src}`);
+  });
+  return box.innerHTML;
+}
+
+export function DocDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const showToast = useUiStore((s) => s.showToast);
+  const confirmDialog = useUiStore((s) => s.confirmDialog);
+  const me = useAuthStore((s) => s.user);
+
+  const [doc, setDoc] = useState<DocDetail | null>(null);
+  const [access, setAccess] = useState<DocAccess>({
+    role: 'VIEWER',
+    canRead: true,
+    canWrite: false,
+    canDelete: false,
+    canInvite: false,
+    isPublic: false,
+  });
+  const role = access.role;
+  const [title, setTitle] = useState('');
+  const [exportOpen, setExportOpen] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty'>('saved');
+  const [fonts, setFonts] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [comments, setComments] = useState<DocumentComment[]>([]);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [anchorDraft, setAnchorDraft] = useState('');
+  const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
+  const [shareOpen, setShareOpen] = useState(false);
+  const [versionOpen, setVersionOpen] = useState(false);
+  const editorRef = useRef<RichEditorRef>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const attachInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const draftRef = useRef<{ title?: string; contentJson?: string }>({});
+
+  const canWrite = access.canWrite;
+  const canDelete = access.canDelete;
+  const canInvite = access.canInvite;
+
+  const flushSave = useCallback(async () => {
+    if (!id) return;
+    if (!draftRef.current.title && !draftRef.current.contentJson) return;
+    setSaveStatus('saving');
+    try {
+      await api.patch(`/docs/${id}`, { ...draftRef.current });
+      draftRef.current = {};
+      setSaveStatus('saved');
+    } catch (err) {
+      setSaveStatus('dirty');
+      showToast(asApiError(err).error, 'error');
+    }
+  }, [id, showToast]);
+
+  const scheduleSave = useCallback(() => {
+    if (!canWrite) return;
+    setSaveStatus('dirty');
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      void flushSave();
+    }, 1000);
+  }, [flushSave, canWrite]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      void flushSave();
+    };
+  }, [flushSave]);
+
+  const loadAttachments = useCallback(async () => {
+    if (!id) return;
+    try {
+      const { data } = await api.get<{ list: Attachment[] }>('/attachments', {
+        params: { documentId: id },
+      });
+      setAttachments(data.list);
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
+
+  const loadComments = useCallback(async () => {
+    if (!id) return;
+    try {
+      const { data } = await api.get<{ list: DocumentComment[] }>(`/docs/${id}/comments`);
+      setComments(data.list);
+    } catch {
+      /* 评论不影响文档阅读 */
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    (async () => {
+      try {
+        const [docRes, fontsRes, userFontsRes, treeRes] = await Promise.all([
+          api.get<{ doc: DocDetail; role: DocAccess['role']; access: DocAccess }>(`/docs/${id}`),
+          api.get<{ list: BuiltinFont[] }>('/fonts/builtin'),
+          api.get<{ list: UserFont[] }>('/fonts'),
+          api.get<{ favorites: { id: string }[] }>('/docs/tree'),
+        ]);
+        setDoc(docRes.data.doc);
+        setAccess(docRes.data.access);
+        setTitle(docRes.data.doc.title);
+        setIsFavorite(!!treeRes.data.favorites.find((f) => f.id === id));
+        const families = [
+          ...fontsRes.data.list.map((f) => f.family),
+          ...userFontsRes.data.list.map((f) => f.family),
+        ];
+        setFonts(families);
+        void loadAttachments();
+        void loadComments();
+      } catch (err) {
+        showToast(asApiError(err).error, 'error');
+        navigate('/app/docs');
+      }
+    })();
+  }, [id, navigate, showToast, loadAttachments, loadComments]);
+
+  const handleTitle = (v: string) => {
+    if (!canWrite) return;
+    setTitle(v);
+    draftRef.current.title = v;
+    scheduleSave();
+  };
+
+  const handleContent = (json: string) => {
+    if (!canWrite) return;
+    draftRef.current.contentJson = json;
+    scheduleSave();
+  };
+
+  const remove = async () => {
+    if (!id || !doc) return;
+    const ok = await confirmDialog({
+      title: '删除文档',
+      message: `确认删除文档「${title}」？此操作不可恢复。`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/docs/${id}`);
+      navigate('/app/docs');
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const insertImage = async (file: File) => {
+    if (!id || !canWrite) return;
+    try {
+      const data = await uploadFile<{ attachment: Attachment }>(
+        '/attachments/upload-image',
+        file,
+        { documentId: id, category: 'doc-image' },
+      );
+      editorRef.current?.editor
+        ?.chain()
+        .focus()
+        .setImage({ src: data.attachment.url, alt: displayFilename(data.attachment.originalName) })
+        .run();
+      void loadAttachments();
+      showToast('图片已插入', 'success');
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const insertAttachment = async (file: File) => {
+    if (!id || !canWrite) return;
+    try {
+      const data = await uploadFile<{ attachment: Attachment }>(
+        '/attachments/upload',
+        file,
+        { documentId: id, category: 'doc-file' },
+      );
+      const sizeKb = (data.attachment.size / 1024).toFixed(1);
+      const filename = displayFilename(data.attachment.originalName);
+      editorRef.current?.editor
+        ?.chain()
+        .focus()
+        .insertContent(
+          `<p><a href="${data.attachment.url}" target="_blank" rel="noopener">📎 ${escapeHtml(filename)} (${sizeKb} KB)</a></p>`,
+        )
+        .run();
+      void loadAttachments();
+      showToast('附件已插入', 'success');
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const importDoc = async (file: File) => {
+    if (!doc) return;
+    try {
+      const data = await uploadFile<{ doc: DocDetail }>('/docs/import', file, {
+        workspaceId: doc.workspaceId,
+      });
+      showToast('已导入为新文档', 'success');
+      navigate(`/app/docs/${data.doc.id}`);
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const exportAs = async (format: 'md' | 'docx' | 'html') => {
+    if (!id) return;
+    try {
+      await downloadFromApi(`/docs/${id}/export?format=${format}`, `${title || '文档'}.${format}`);
+      showToast(`已导出 ${format.toUpperCase()}`, 'success');
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    } finally {
+      setExportOpen(false);
+    }
+  };
+
+  const printPdf = async () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      showToast('浏览器阻止了打印窗口，请允许弹窗后重试', 'error');
+      return;
+    }
+    await flushSave();
+    setExportOpen(false);
+    const contentHtml = htmlWithAbsoluteImages(editorRef.current?.editor?.getHTML() ?? doc?.contentJson ?? '');
+    const attachmentHtml = attachments.length
+      ? `<section class="attachments"><h2>文档附件</h2><ul>${attachments
+          .map((a) => {
+            const name = displayFilename(a.originalName);
+            const url = `${window.location.origin}${a.url}?download=1`;
+            return `<li><a href="${url}">${escapeHtml(name)}</a><span>${(a.size / 1024).toFixed(1)} KB</span></li>`;
+          })
+          .join('')}</ul></section>`
+      : '';
+    printWindow.document.open();
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtml(title || '文档')}</title>
+    <style>
+      @page { size: A4; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+      body { font-family: ui-serif, Georgia, 'Times New Roman', 'Noto Serif CJK SC', serif; }
+      .page { box-sizing: border-box; width: 210mm; min-height: 297mm; padding: 18mm 14mm; }
+      h1 { margin: 0 0 14mm; font-size: 26pt; line-height: 1.25; font-weight: 700; }
+      .content { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12pt; line-height: 1.75; }
+      .content img { max-width: 100%; height: auto; page-break-inside: avoid; }
+      .content table { max-width: 100%; border-collapse: collapse; }
+      .content td, .content th { border: 1px solid #ddd; padding: 4px 6px; }
+      .content pre { white-space: pre-wrap; word-break: break-word; }
+      .attachments { margin-top: 12mm; border-top: 1px solid #ddd; padding-top: 6mm; font-family: ui-sans-serif, system-ui, sans-serif; }
+      .attachments h2 { font-size: 12pt; margin: 0 0 4mm; }
+      .attachments ul { margin: 0; padding-left: 18px; }
+      .attachments li { margin: 2mm 0; }
+      .attachments span { margin-left: 8px; color: #666; font-size: 10pt; }
+      @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+    </style>
+  </head>
+  <body>
+    <article class="page">
+      <h1>${escapeHtml(title || '未命名文档')}</h1>
+      <main class="content">${contentHtml}</main>
+      ${attachmentHtml}
+    </article>
+    <script>
+      window.addEventListener('load', () => setTimeout(() => { window.focus(); window.print(); }, 100));
+    </script>
+  </body>
+</html>`);
+    printWindow.document.close();
+  };
+
+  const removeAttachment = async (att: Attachment) => {
+    const ok = await confirmDialog({
+      title: '删除附件',
+      message: `删除附件「${displayFilename(att.originalName)}」？`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/attachments/${att.id}`);
+      void loadAttachments();
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const addComment = async (parentId?: string) => {
+    if (!id) return;
+    const body = (parentId ? replyDraft[parentId] : commentDraft).trim();
+    if (!body) {
+      showToast('请输入评论内容', 'error');
+      return;
+    }
+    const selectedText = window.getSelection()?.toString().trim().slice(0, 300) || '';
+    try {
+      await api.post(`/docs/${id}/comments`, {
+        body,
+        parentId,
+        anchorText: parentId ? undefined : anchorDraft.trim() || selectedText || undefined,
+      });
+      if (parentId) setReplyDraft((prev) => ({ ...prev, [parentId]: '' }));
+      else {
+        setCommentDraft('');
+        setAnchorDraft('');
+      }
+      await loadComments();
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const resolveComment = async (commentId: string, resolved: boolean) => {
+    if (!id) return;
+    try {
+      await api.patch(`/docs/${id}/comments/${commentId}`, { resolved });
+      await loadComments();
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!id) return;
+    try {
+      await api.delete(`/docs/${id}/comments/${commentId}`);
+      await loadComments();
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const onRestored = async () => {
+    if (!id) return;
+    try {
+      const { data } = await api.get<{ doc: DocDetail }>(`/docs/${id}`);
+      setDoc(data.doc);
+      setTitle(data.doc.title);
+      editorRef.current?.setContent(data.doc.contentJson);
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const initial = useMemo(() => doc?.contentJson ?? '', [doc?.id]);
+  const unresolvedComments = comments.filter((c) => !c.resolvedAt);
+  const rootComments = comments.filter((c) => !c.parentId);
+
+  return (
+    <div className="py-4 sm:py-6 animate-fade-in-up">
+      <div className="no-print flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <button
+          onClick={() => navigate('/app/docs')}
+          className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-liquid-indigo transition-colors"
+        >
+          <ChevronLeft size={16} /> 返回文档列表
+        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {doc && me && (
+            <PresenceIndicator resourceType="doc" resourceId={doc.id} selfId={me.id} />
+          )}
+          <span
+            className={`text-xs px-2 py-1 rounded-full ${
+              role === 'OWNER'
+                ? 'bg-liquid-indigo/10 text-liquid-indigo'
+                : role === 'EDITOR'
+                  ? 'bg-emerald-50 text-emerald-700'
+                  : 'bg-amber-50 text-amber-700'
+            }`}
+          >
+            {role === 'OWNER' ? '所有者' : role === 'EDITOR' ? '可编辑' : '仅查看'}
+          </span>
+          <span
+            className={`text-xs ${
+              saveStatus === 'saved'
+                ? 'text-emerald-600'
+                : saveStatus === 'saving'
+                  ? 'text-text-secondary'
+                  : 'text-amber-600'
+            }`}
+          >
+            {!canWrite ? '只读' : saveStatus === 'saved' ? '已保存' : saveStatus === 'saving' ? '正在保存…' : '待保存'}
+          </span>
+          {doc && (
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    if (isFavorite) await api.delete(`/docs/${doc.id}/favorite`);
+                    else await api.post(`/docs/${doc.id}/favorite`);
+                    setIsFavorite(!isFavorite);
+                  } catch (err) {
+                    showToast(asApiError(err).error, 'error');
+                  }
+                }}
+                title={isFavorite ? '取消收藏' : '收藏'}
+                className={`p-2 rounded-lg ${
+                  isFavorite ? 'text-amber-500 bg-amber-50' : 'text-text-secondary hover:bg-black/5'
+                }`}
+              >
+                <Star size={14} fill={isFavorite ? 'currentColor' : 'none'} />
+              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setExportOpen((v) => !v)}
+                  onBlur={() => window.setTimeout(() => setExportOpen(false), 200)}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-black/10 text-text-secondary hover:bg-black/5"
+                >
+                  <Download size={14} /> 导出
+                </button>
+                {exportOpen && (
+                  <div className="absolute right-0 mt-1 w-44 bg-white border border-black/5 rounded-lg shadow-lg z-20 py-1 text-sm">
+                    <button
+                      onMouseDown={() => exportAs('md')}
+                      className="w-full text-left px-3 py-1.5 hover:bg-black/5"
+                    >
+                      Markdown (.md)
+                    </button>
+                    <button
+                      onMouseDown={() => exportAs('docx')}
+                      className="w-full text-left px-3 py-1.5 hover:bg-black/5"
+                    >
+                      Word (.docx)
+                    </button>
+                    <button
+                      onMouseDown={() => exportAs('html')}
+                      className="w-full text-left px-3 py-1.5 hover:bg-black/5"
+                    >
+                      HTML (.html)
+                    </button>
+                    <button
+                      onMouseDown={printPdf}
+                      className="w-full text-left px-3 py-1.5 hover:bg-black/5"
+                    >
+                      打印 / 另存为 PDF
+                    </button>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => setShareOpen(true)}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-black/10 text-text-secondary hover:bg-black/5"
+              >
+                <Users size={14} /> 分享
+              </button>
+              <button
+                onClick={() => setVersionOpen(true)}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-black/10 text-text-secondary hover:bg-black/5"
+              >
+                <History size={14} /> 历史
+              </button>
+              <button
+                onClick={() => setCommentsOpen(true)}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-black/10 text-text-secondary hover:bg-black/5"
+              >
+                <MessageSquare size={14} /> 评论
+                {unresolvedComments.length > 0 && (
+                  <span className="ml-0.5 rounded-full bg-liquid-indigo/10 px-1.5 py-0.5 text-[10px] text-liquid-indigo">
+                    {unresolvedComments.length}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+          {canDelete && (
+            <button
+              onClick={remove}
+              className="p-2 rounded-lg text-text-secondary hover:bg-black/5 hover:text-red-500 transition-colors"
+              title="删除文档"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {doc && (
+        <div className="doc-print-area bg-paper-white rounded-2xl shadow-sm border border-black/5 p-4 sm:p-8 lg:p-12">
+          <input
+            value={title}
+            onChange={(e) => handleTitle(e.target.value)}
+            placeholder="未命名文档"
+            disabled={!canWrite}
+            className="w-full text-3xl sm:text-[40px] font-serif font-bold text-text-primary mb-6 bg-transparent outline-none placeholder-black/20 disabled:opacity-90"
+          />
+          <RichEditor
+            ref={editorRef}
+            initialContent={initial}
+            onChange={handleContent}
+            fontFamilies={fonts}
+            editable={canWrite}
+            handlers={
+              canWrite
+                ? {
+                    onUploadImage: () => imageInputRef.current?.click(),
+                    onUploadAttachment: () => attachInputRef.current?.click(),
+                    onImportFile: () => importInputRef.current?.click(),
+                  }
+                : undefined
+            }
+          />
+
+          {attachments.length > 0 && (
+            <div className="print-attachments mt-6 pt-6 border-t border-black/5">
+              <div className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
+                <Paperclip size={14} /> 文档附件
+              </div>
+              <ul className="space-y-2">
+                {attachments.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-black/[0.03] group"
+                  >
+                    {a.mimeType.startsWith('image/') ? (
+                      <img src={a.url} alt={displayFilename(a.originalName)} className="w-10 h-10 rounded object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-liquid-indigo/10 text-liquid-indigo flex items-center justify-center">
+                        <Paperclip size={16} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-sm">
+                        <div className="font-medium text-text-primary truncate">{displayFilename(a.originalName)}</div>
+                      <div className="text-xs text-text-secondary">
+                        {(a.size / 1024).toFixed(1)} KB · {new Date(a.createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                    <a
+                      href={`${a.url}?download=1`}
+                      className="p-1.5 text-text-secondary hover:text-liquid-indigo"
+                      title="下载"
+                    >
+                      <Download size={14} />
+                    </a>
+                    {canWrite && (
+                      <button
+                        onClick={() => removeAttachment(a)}
+                        className="p-1.5 text-text-secondary hover:text-red-500"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void insertImage(file);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={attachInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void insertAttachment(file);
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".docx,.md,.markdown,.txt"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void importDoc(file);
+          e.target.value = '';
+        }}
+      />
+
+      {doc && (
+        <>
+          <ShareDialog
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            resourceType="doc"
+            resourceId={doc.id}
+            canManage={canInvite}
+          />
+          <VersionDrawer
+            open={versionOpen}
+            onClose={() => setVersionOpen(false)}
+            docId={doc.id}
+            canWrite={canWrite}
+            onRestored={onRestored}
+          />
+          {commentsOpen && (
+            <div className="no-print fixed inset-y-0 right-0 z-40 w-full max-w-md bg-white shadow-2xl border-l border-black/10 flex flex-col">
+              <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-text-primary">文档评论</div>
+                  <div className="text-xs text-text-secondary">
+                    可给选中文本或段落补充讨论，回复会串在同一条下。
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCommentsOpen(false)}
+                  className="text-sm text-text-secondary hover:text-text-primary"
+                >
+                  关闭
+                </button>
+              </div>
+              <div className="p-4 border-b border-black/5 space-y-2">
+                <input
+                  value={anchorDraft}
+                  onChange={(e) => setAnchorDraft(e.target.value)}
+                  placeholder="关联文本（可留空，自动使用当前选中文本）"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-black/10 bg-white"
+                />
+                <textarea
+                  value={commentDraft}
+                  onChange={(e) => setCommentDraft(e.target.value)}
+                  rows={3}
+                  placeholder="写一条评论"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-black/10 bg-white"
+                />
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => addComment()}
+                    className="px-3 py-1.5 rounded-lg bg-liquid-indigo text-white text-sm"
+                  >
+                    添加评论
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {rootComments.length === 0 ? (
+                  <div className="text-sm text-text-secondary text-center py-10">暂无评论</div>
+                ) : (
+                  rootComments.map((comment) => {
+                    const replies = comments.filter((c) => c.parentId === comment.id);
+                    return (
+                      <div
+                        key={comment.id}
+                        className={`rounded-xl border p-3 ${
+                          comment.resolvedAt ? 'border-emerald-100 bg-emerald-50/40' : 'border-black/5'
+                        }`}
+                      >
+                        {comment.anchorText && (
+                          <div className="text-xs text-text-secondary bg-black/[0.03] rounded-lg px-2 py-1 mb-2">
+                            {comment.anchorText}
+                          </div>
+                        )}
+                        <div className="text-sm text-text-primary whitespace-pre-wrap">{comment.body}</div>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-xs text-text-secondary">
+                          <span>
+                            {comment.author.name} · {new Date(comment.createdAt).toLocaleString('zh-CN')}
+                          </span>
+                          <span className="flex items-center gap-2">
+                            <button
+                              onClick={() => resolveComment(comment.id, !comment.resolvedAt)}
+                              className="hover:text-liquid-indigo inline-flex items-center gap-1"
+                            >
+                              <CheckCircle2 size={12} />
+                              {comment.resolvedAt ? '重新打开' : '解决'}
+                            </button>
+                            <button
+                              onClick={() => deleteComment(comment.id)}
+                              className="hover:text-red-500"
+                            >
+                              删除
+                            </button>
+                          </span>
+                        </div>
+                        {replies.length > 0 && (
+                          <div className="mt-3 pl-3 border-l border-black/10 space-y-2">
+                            {replies.map((reply) => (
+                              <div key={reply.id} className="text-sm">
+                                <div className="whitespace-pre-wrap">{reply.body}</div>
+                                <div className="text-[11px] text-text-secondary mt-0.5">
+                                  {reply.author.name} · {new Date(reply.createdAt).toLocaleString('zh-CN')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            value={replyDraft[comment.id] ?? ''}
+                            onChange={(e) =>
+                              setReplyDraft((prev) => ({ ...prev, [comment.id]: e.target.value }))
+                            }
+                            placeholder="回复"
+                            className="flex-1 px-2 py-1.5 text-xs rounded-lg border border-black/10"
+                          />
+                          <button
+                            onClick={() => addComment(comment.id)}
+                            className="px-2 py-1.5 rounded-lg border border-black/10 text-xs"
+                          >
+                            发送
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

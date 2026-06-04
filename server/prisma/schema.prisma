@@ -1,0 +1,471 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  passwordHash    String
+  name            String
+  avatarUrl       String?
+  role            String     @default("USER")
+  status          String     @default("ACTIVE")
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  workspaces      Workspace[] @relation("WorkspaceOwner")
+  documents       Document[]  @relation("DocCreator")
+  permissions     DocumentPermission[]
+  tablePermissions TablePermission[]
+  todos           TodoItem[]
+  fonts           UserFont[]
+  auditLogs       AuditLog[]
+  attachments     Attachment[]
+  avatarHistory   UserAvatar[]
+  shareLinks      ShareLink[] @relation("ShareLinkCreator")
+  documentVersions DocumentVersion[] @relation("DocVersionAuthor")
+  documentComments DocumentComment[] @relation("DocCommentAuthor")
+  presence        ResourcePresence[]
+  groups          UserGroupMember[]
+  calendarEvents  CalendarEvent[]
+  mailAccounts    MailAccount[]
+  notifications   Notification[]
+  preferences     UserPreferences?
+  favoriteDocs    DocumentFavorite[]
+  tableForms      TableFormView[]
+  sessions        Session[]
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  userAgent   String?
+  ipAddr      String?
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+}
+
+model EmailVerificationCode {
+  id         String    @id @default(cuid())
+  email      String
+  codeHash   String
+  purpose    String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([email, purpose])
+}
+
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  scope     String
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([scope, key, createdAt])
+}
+
+model Workspace {
+  id        String     @id @default(cuid())
+  name      String
+  kind      String     @default("PRIVATE")
+  ownerId   String
+  owner     User       @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  documents Document[]
+  tables    TableBase[]
+  createdAt DateTime   @default(now())
+
+  @@index([kind])
+}
+
+model Document {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId      String?
+  parent        Document?  @relation("DocTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children      Document[] @relation("DocTree")
+  title         String
+  contentJson   String   @default("")
+  isArchived    Boolean  @default(false)
+  createdById   String
+  createdBy     User     @relation("DocCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  permissions   DocumentPermission[]
+  versions      DocumentVersion[]
+  comments      DocumentComment[]
+  attachments   Attachment[] @relation("DocAttachment")
+  favorites     DocumentFavorite[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId, parentId])
+}
+
+model DocumentFavorite {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, documentId])
+  @@index([userId, createdAt])
+}
+
+model DocumentPermission {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String
+  createdAt   DateTime @default(now())
+
+  @@unique([documentId, userId])
+}
+
+model TableBase {
+  id           String       @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
+  templateKey  String?
+  fields       TableField[]
+  records      TableRecord[]
+  permissions  TablePermission[]
+  attachments  Attachment[] @relation("TableAttachment")
+  forms        TableFormView[] @relation("FormViewOnTable")
+  createdById  String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model TablePermission {
+  id        String    @id @default(cuid())
+  tableId   String
+  table     TableBase @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String
+  createdAt DateTime  @default(now())
+
+  @@unique([tableId, userId])
+}
+
+model TableField {
+  id        String   @id @default(cuid())
+  tableId   String
+  table     TableBase @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  name      String
+  type      String
+  options   String   @default("{}")
+  order     Int      @default(0)
+}
+
+model TableRecord {
+  id        String   @id @default(cuid())
+  tableId   String
+  table     TableBase @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  dataJson  String   @default("{}")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TodoItem {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  dueDate     DateTime?
+  completedAt DateTime?
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, dueDate])
+}
+
+model UserFont {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family      String
+  source      String
+  licenseAck  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  action    String
+  target    String
+  metaJson  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+}
+
+model Attachment {
+  id           String    @id @default(cuid())
+  ownerId      String
+  owner        User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  documentId   String?
+  document     Document? @relation("DocAttachment", fields: [documentId], references: [id], onDelete: SetNull)
+  tableId      String?
+  table        TableBase? @relation("TableAttachment", fields: [tableId], references: [id], onDelete: SetNull)
+  category     String    @default("file")
+  originalName String
+  storedName   String
+  mimeType     String
+  size         Int
+  createdAt    DateTime  @default(now())
+
+  @@index([ownerId, createdAt])
+  @@index([documentId])
+  @@index([tableId])
+}
+
+model UserAvatar {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url       String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model ShareLink {
+  id            String    @id @default(cuid())
+  token         String    @unique
+  resourceType  String
+  resourceId    String
+  role          String    @default("view")
+  requireLogin  Boolean   @default(false)
+  expiresAt     DateTime?
+  createdById   String
+  createdBy     User      @relation("ShareLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([resourceType, resourceId])
+}
+
+model DocumentVersion {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  title       String
+  contentJson String
+  label       String?
+  authorId    String
+  author      User     @relation("DocVersionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([documentId, createdAt])
+}
+
+model DocumentComment {
+  id          String            @id @default(cuid())
+  documentId  String
+  document    Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User              @relation("DocCommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  anchorId    String?
+  anchorText  String?
+  body        String
+  parentId    String?
+  parent      DocumentComment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     DocumentComment[] @relation("CommentThread")
+  resolvedAt  DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([documentId, resolvedAt, createdAt])
+}
+
+model ResourcePresence {
+  id           String   @id @default(cuid())
+  resourceType String
+  resourceId   String
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenAt   DateTime @default(now())
+
+  @@unique([resourceType, resourceId, userId])
+  @@index([resourceType, resourceId, lastSeenAt])
+}
+
+model UserGroup {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  description String?
+  createdAt   DateTime          @default(now())
+  members     UserGroupMember[]
+}
+
+model UserGroupMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model CalendarEvent {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  startAt         DateTime
+  endAt           DateTime
+  allDay          Boolean   @default(false)
+  location        String?
+  color           String?
+  reminderMinutes Int?
+  relatedTodoId   String?
+  repeatRule      String?
+  exceptionsJson  String    @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId, startAt])
+}
+
+model MailAccount {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label         String
+  email         String
+  imapHost      String
+  imapPort      Int
+  imapSecure    Boolean       @default(true)
+  smtpHost      String
+  smtpPort      Int
+  smtpSecure    Boolean       @default(true)
+  username      String
+  passwordEnc   String
+  fromName      String?
+  signature     String?
+  isDefault     Boolean       @default(false)
+  lastSyncedAt  DateTime?
+  lastError     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  messages      MailMessage[]
+
+  @@unique([userId, email])
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  title     String
+  body      String?
+  link      String?
+  metaJson  String   @default("{}")
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+model UserPreferences {
+  userId               String   @id
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme                String   @default("system")
+  themeColor           String   @default("#5E5CE6")
+  defaultHome          String   @default("/app/dashboard")
+  editorFontFamily     String?
+  editorFontSize       Int      @default(16)
+  autoSaveSeconds      Int      @default(1)
+  notifyInApp          Boolean  @default(true)
+  notifyEmail          Boolean  @default(false)
+  calendarDefaultRemind Int     @default(15)
+  language             String   @default("zh-CN")
+  mailListPageSize     Int      @default(30)
+  mailSyncLimit        Int      @default(50)
+  updatedAt            DateTime @updatedAt
+}
+
+model TableFormView {
+  id          String    @id @default(cuid())
+  tableId     String
+  table       TableBase @relation("FormViewOnTable", fields: [tableId], references: [id], onDelete: Cascade)
+  token       String    @unique
+  title       String
+  description String?
+  fieldsJson  String    @default("[]")
+  requireLogin Boolean  @default(false)
+  closedAt    DateTime?
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  submissions Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([tableId])
+}
+
+model CalendarReminderLog {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  sentAt    DateTime @default(now())
+}
+
+model MailMessage {
+  id           String      @id @default(cuid())
+  accountId    String
+  account      MailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  folder       String      @default("INBOX")
+  uid          Int
+  messageId    String?
+  subject      String?
+  fromName     String?
+  fromEmail    String?
+  toJson       String      @default("[]")
+  ccJson       String      @default("[]")
+  receivedAt   DateTime
+  preview      String?
+  textBody     String?
+  htmlBody     String?
+  isRead       Boolean     @default(false)
+  isFlagged    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+
+  @@unique([accountId, folder, uid])
+  @@index([accountId, receivedAt])
+}
