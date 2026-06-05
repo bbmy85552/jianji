@@ -20,28 +20,29 @@
   <img alt="Built with React and Express" src="https://img.shields.io/badge/built%20with-React%20%2B%20Express-61DAFB">
   <img alt="Database" src="https://img.shields.io/badge/database-SQLite-003B57">
   <img alt="Deploy" src="https://img.shields.io/badge/deploy-Docker%20Compose-2496ED">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
 简记把文档、数据表、日历、邮箱聚合、通知、分享协作和管理后台放在一个自托管空间里。它适合个人服务器、家庭服务器、小团队，以及所有希望把数据掌握在自己手里的用户。
 
 ## 预览
 
-截图以 1920x1080 桌面浏览器比例生成，README 中会缩放展示。
-
 <table>
   <tr>
     <td><img src="docs/images/screenshot-dashboard.png" width="420" alt="工作台" /></td>
-    <td><img src="docs/images/screenshot-mail.png" width="420" alt="邮箱聚合" /></td>
+    <td><img src="docs/images/screenshot-doc-editor.png" width="420" alt="文档编辑器" /></td>
   </tr>
   <tr>
     <td align="center">工作台</td>
+    <td align="center">文档编辑器</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/screenshot-mail.png" width="420" alt="邮箱聚合" /></td>
+    <td><img src="docs/images/screenshot-admin-settings.png" width="420" alt="管理后台系统设置" /></td>
+  </tr>
+  <tr>
     <td align="center">邮箱聚合</td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="docs/images/screenshot-admin-settings.png" width="860" alt="管理后台系统设置" /></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">管理后台</td>
+    <td align="center">管理后台</td>
   </tr>
 </table>
 
@@ -113,8 +114,6 @@ bash scripts/push-update.sh --host root@example.com --dir /opt/jianji --runtime
 
 推送式更新会通过 SSH/rsync 同步源码，并让服务器跳过远端拉取步骤，直接执行无损重建；服务器上的 `.env`、初始化链接、证书、数据库、上传文件和备份目录不会被覆盖。
 
-Releases 仍然有价值：它适合稳定里程碑、Release Notes、回滚说明和社区可见的版本历史。对当前 Web 自托管形态来说，先使用 commit 更新，后续为稳定版本补充 tag 和 Releases 是更轻的路线。
-
 ## 本地开发
 
 ```bash
@@ -137,14 +136,6 @@ npm run test
 npm run build
 ```
 
-重新生成 README 截图：
-
-```bash
-JIANJI_SCREENSHOT_PASSWORD=你的本地演示管理员密码 node scripts/capture-readme-screenshots.mjs
-```
-
-截图脚本默认生成 1920x1080 图片，不会把密码写入文件。
-
 ## 数据与安全
 
 Docker 部署使用两个持久化卷：
@@ -158,4 +149,4 @@ Docker 部署使用两个持久化卷：
 
 ## License
 
-应用代码协议尚未最终选择。发布公开稳定版前建议在根目录加入 `LICENSE`：宽松商用可选 MIT 或 Apache-2.0；如果希望修改版继续开源，可选 AGPL-3.0。内置字体遵循各自 OFL 许可，见 [LICENSES/FONTS.md](LICENSES/FONTS.md)。
+简记应用代码基于 [MIT License](LICENSE) 开源。内置字体遵循各自 OFL 许可，见 [LICENSES/FONTS.md](LICENSES/FONTS.md)。

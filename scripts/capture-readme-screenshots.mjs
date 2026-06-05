@@ -18,6 +18,24 @@ if (!password) {
 const outputDir = path.resolve('docs/images');
 const userDataDir = '/private/tmp/jianji-readme-chrome';
 const debugPort = Number(process.env.JIANJI_CHROME_DEBUG_PORT || 9333);
+const demoDocTitle = 'README 展示文档';
+const demoDocContent = `
+  <h1 style="text-align:center">简记文档编辑器</h1>
+  <p style="text-align:center">
+    <span style="color:#5E5CE6"><strong>字号、颜色、对齐、列表与附件</strong></span>
+    都可以在同一个编辑界面中完成。
+  </p>
+  <h2>写作与协作</h2>
+  <p>用富文本记录方案、会议纪要、灵感和项目文档，并通过分享功能邀请团队成员一起维护。</p>
+  <ul>
+    <li><span style="color:#2563EB">蓝色强调重点</span>，让关键信息更容易被扫描。</li>
+    <li><mark>高亮标注</mark>待确认内容，后续可以继续评论和修订。</li>
+    <li style="text-align:center">居中段落适合标题、摘要和展示型内容。</li>
+  </ul>
+  <blockquote>
+    自托管不是把复杂留给用户，而是把数据控制权交还给用户。
+  </blockquote>
+`;
 
 async function waitForJson(url, timeoutMs = 15000) {
   const start = Date.now();
@@ -98,10 +116,65 @@ async function login() {
   return parseCookie(setCookie);
 }
 
+async function authedJson(cookie, route, options = {}) {
+  const res = await fetch(`${baseUrl}/api${route}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: `${cookie.name}=${cookie.value}`,
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${route} failed: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+async function prepareDemoState(cookie) {
+  await authedJson(cookie, '/me/preferences', {
+    method: 'PUT',
+    body: JSON.stringify({
+      theme: 'light',
+      language: 'zh-CN',
+      themeColor: '#5E5CE6',
+      defaultHome: '/app/dashboard',
+      editorFontSize: 16,
+      autoSaveSeconds: 1,
+      notifyInApp: true,
+      notifyEmail: false,
+      calendarDefaultRemind: 15,
+      mailListPageSize: 30,
+      mailSyncLimit: 50,
+    }),
+  });
+
+  const tree = await authedJson(cookie, '/docs/tree');
+  const existing = [...(tree.mine || []), ...(tree.public || [])].find((doc) => doc.title === demoDocTitle);
+  if (existing) {
+    await authedJson(cookie, `/docs/${existing.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: demoDocTitle, contentJson: demoDocContent }),
+    });
+    return existing.id;
+  }
+
+  const { doc } = await authedJson(cookie, '/docs', {
+    method: 'POST',
+    body: JSON.stringify({
+      workspaceKind: 'PRIVATE',
+      title: demoDocTitle,
+      contentJson: demoDocContent,
+    }),
+  });
+  return doc.id;
+}
+
 async function capture(page, route, file) {
   await page.send('Page.navigate', { url: `${baseUrl}${route}` });
   await page.waitForLoad();
-  await new Promise((resolve) => setTimeout(resolve, 700));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   const result = await page.send('Page.captureScreenshot', {
     format: 'png',
     fromSurface: true,
@@ -115,6 +188,7 @@ await fs.mkdir(outputDir, { recursive: true });
 await fs.rm(userDataDir, { recursive: true, force: true });
 
 const cookie = await login();
+const demoDocId = await prepareDemoState(cookie);
 const chrome = spawn(chromePath, [
   '--headless=new',
   '--disable-gpu',
@@ -149,6 +223,7 @@ try {
 
   const results = [];
   results.push(await capture(page, '/app/dashboard', 'screenshot-dashboard.png'));
+  results.push(await capture(page, `/app/docs/${demoDocId}`, 'screenshot-doc-editor.png'));
   results.push(await capture(page, '/app/mail', 'screenshot-mail.png'));
   results.push(await capture(page, '/admin/settings', 'screenshot-admin-settings.png'));
   page.close();

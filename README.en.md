@@ -20,28 +20,29 @@
   <img alt="Built with React and Express" src="https://img.shields.io/badge/built%20with-React%20%2B%20Express-61DAFB">
   <img alt="Database" src="https://img.shields.io/badge/database-SQLite-003B57">
   <img alt="Deploy" src="https://img.shields.io/badge/deploy-Docker%20Compose-2496ED">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green">
 </p>
 
 Jianji brings documents, structured tables, calendars, mail aggregation, notifications, sharing, collaboration, and admin operations into one self-hosted workspace. It is designed for personal servers, home labs, small teams, and anyone who wants to own their data.
 
 ## Preview
 
-Screenshots are captured at a 1920x1080 desktop browser size and scaled down in the README.
-
 <table>
   <tr>
     <td><img src="docs/images/screenshot-dashboard.png" width="420" alt="Dashboard" /></td>
-    <td><img src="docs/images/screenshot-mail.png" width="420" alt="Mail aggregation" /></td>
+    <td><img src="docs/images/screenshot-doc-editor.png" width="420" alt="Document editor" /></td>
   </tr>
   <tr>
     <td align="center">Dashboard</td>
+    <td align="center">Document Editor</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/screenshot-mail.png" width="420" alt="Mail aggregation" /></td>
+    <td><img src="docs/images/screenshot-admin-settings.png" width="420" alt="Admin settings" /></td>
+  </tr>
+  <tr>
     <td align="center">Mail</td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="docs/images/screenshot-admin-settings.png" width="860" alt="Admin settings" /></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">Admin Console</td>
+    <td align="center">Admin Console</td>
   </tr>
 </table>
 
@@ -113,8 +114,6 @@ bash scripts/push-update.sh --host root@example.com --dir /opt/jianji --runtime
 
 Push updates sync source over SSH/rsync and ask the server to skip remote fetching before rebuilding safely. The server-side `.env`, setup link, certificates, database, uploads, and backups are preserved.
 
-Releases are still useful for stable milestones, release notes, rollback notes, and a public version history. For the current self-hosted web app shape, commit-based updates are enough; tags and Releases can be added later for stable public versions.
-
 ## Local Development
 
 ```bash
@@ -137,14 +136,6 @@ npm run test
 npm run build
 ```
 
-Regenerate README screenshots:
-
-```bash
-JIANJI_SCREENSHOT_PASSWORD=your-local-demo-admin-password node scripts/capture-readme-screenshots.mjs
-```
-
-The screenshot helper writes 1920x1080 images by default and does not save the password to disk.
-
 ## Data And Security
 
 Docker deployment uses two persistent volumes:
@@ -158,4 +149,4 @@ The repository and Docker build context exclude `.env`, `SETUP_URL.txt`, SQLite 
 
 ## License
 
-The application code license has not been finalized yet. Before a stable public release, add a root `LICENSE`: choose MIT or Apache-2.0 for permissive commercial use, or AGPL-3.0 if modified versions should remain open. Bundled font references follow their own OFL licenses; see [LICENSES/FONTS.md](LICENSES/FONTS.md).
+Jianji application code is open sourced under the [MIT License](LICENSE). Bundled font references follow their own OFL licenses; see [LICENSES/FONTS.md](LICENSES/FONTS.md).
