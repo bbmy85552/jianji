@@ -339,6 +339,14 @@ export function DocDetailPage() {
     }
   };
 
+  const downloadAttachment = async (att: Attachment) => {
+    try {
+      await downloadFromApi(`/attachments/${att.id}/raw?download=1`, displayFilename(att.originalName));
+    } catch (err) {
+      showToast(asApiError(err).error || '附件下载失败', 'error');
+    }
+  };
+
   const addComment = async (parentId?: string) => {
     if (!id) return;
     const body = (parentId ? replyDraft[parentId] : commentDraft).trim();
@@ -578,13 +586,14 @@ export function DocDetailPage() {
                         {(a.size / 1024).toFixed(1)} KB · {new Date(a.createdAt).toLocaleString()}
                       </div>
                     </div>
-                    <a
-                      href={`${a.url}?download=1`}
+                    <button
+                      type="button"
+                      onClick={() => downloadAttachment(a)}
                       className="p-1.5 text-text-secondary hover:text-liquid-indigo"
                       title="下载"
                     >
                       <Download size={14} />
-                    </a>
+                    </button>
                     {canWrite && (
                       <button
                         onClick={() => removeAttachment(a)}

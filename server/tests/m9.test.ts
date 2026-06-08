@@ -208,6 +208,34 @@ describe('M9 - 评论 / 重复日程 / 备份 / 邮件文件夹', () => {
     await fs.rm(path.dirname(outside), { recursive: true, force: true });
   });
 
+  it('附件下载会兼容旧运行目录中的上传文件', async () => {
+    const app = await getApp();
+    const { cookie } = await loginAdmin();
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: 'admin@test.local' } });
+    const rel = 'attachments/legacy-download/old-note.txt';
+    const legacyRoot = path.resolve(UPLOAD_ROOT, '..', 'dist', 'uploads');
+    const legacyAbs = path.join(legacyRoot, rel);
+    const primaryAbs = path.join(UPLOAD_ROOT, rel);
+    await fs.rm(primaryAbs, { force: true });
+    await fs.mkdir(path.dirname(legacyAbs), { recursive: true });
+    await fs.writeFile(legacyAbs, 'legacy attachment', 'utf8');
+    const att = await prisma.attachment.create({
+      data: {
+        ownerId: admin.id,
+        originalName: '旧附件.txt',
+        storedName: rel,
+        mimeType: 'text/plain',
+        size: 'legacy attachment'.length,
+      },
+    });
+
+    const raw = await request(app).get(`/api/attachments/${att.id}/raw?download=1`).set('Cookie', cookie);
+    expect(raw.status).toBe(200);
+    expect(raw.text).toBe('legacy attachment');
+    expect(raw.headers['content-disposition']).toContain(encodeURIComponent('旧附件.txt'));
+    await fs.rm(path.dirname(legacyAbs), { recursive: true, force: true });
+  });
+
   it('文件名乱码会被恢复为中文并写入 UTF-8 下载响应头', () => {
     const broken = 'å´éæ±-å­èä¿¡æ¯ç³»ç»peopleæ¹å.pdf';
     const fixed = '吴镜昱-字节信息系统people方向.pdf';

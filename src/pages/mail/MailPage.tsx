@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Mail,
   Plus,
@@ -97,6 +97,40 @@ function boundedInt(value: string | number, min: number, max: number, fallback: 
 export function MailPage() {
   const showToast = useUiStore((s) => s.showToast);
   const confirmDialog = useUiStore((s) => s.confirmDialog);
+
+  const openMailLink = useCallback(
+    async (href: string) => {
+      let url: URL;
+      try {
+        url = new URL(href, window.location.href);
+      } catch {
+        showToast('无法识别该链接地址', 'error');
+        return;
+      }
+      if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) {
+        showToast('该链接类型存在风险，已阻止打开', 'error');
+        return;
+      }
+
+      const target = url.toString();
+      const ok = await confirmDialog({
+        title: '打开邮件链接',
+        message: (
+          <div className="space-y-2 text-sm">
+            <p className="text-text-primary">邮件正文中的链接可能指向外部网站。是否在新窗口打开？</p>
+            <div className="rounded-xl border border-black/10 bg-black/[0.03] px-3 py-2 text-xs text-text-secondary break-all">
+              {target}
+            </div>
+          </div>
+        ),
+        confirmText: '打开链接',
+        cancelText: '取消',
+      });
+      if (!ok) return;
+      window.open(target, '_blank', 'noopener,noreferrer');
+    },
+    [confirmDialog, showToast],
+  );
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [folders, setFolders] = useState<string[]>(['INBOX']);
@@ -779,7 +813,7 @@ export function MailPage() {
               </div>
               <div ref={messageBodyRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3">
                 {selectedMessage.htmlBody ? (
-                  <MailHtmlBody html={selectedMessage.htmlBody} />
+                  <MailHtmlBody html={selectedMessage.htmlBody} onOpenLink={openMailLink} />
                 ) : (
                   <pre className="text-sm whitespace-pre-wrap font-sans break-words">
                     {selectedMessage.textBody || '（邮件无正文）'}
@@ -1165,7 +1199,7 @@ export function MailPage() {
               收件人：{selectedMessage.to.map((t) => t.address).join(', ')}
             </div>
             {selectedMessage.htmlBody ? (
-              <MailHtmlBody html={selectedMessage.htmlBody} />
+              <MailHtmlBody html={selectedMessage.htmlBody} onOpenLink={openMailLink} />
             ) : (
               <pre className="text-sm whitespace-pre-wrap font-sans break-words">
                 {selectedMessage.textBody || '（邮件无正文）'}

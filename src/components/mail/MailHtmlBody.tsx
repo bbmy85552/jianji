@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 
 interface Props {
   html: string;
+  onOpenLink?: (href: string) => void;
 }
 
 /** 在 iframe 内渲染邮件 HTML，避免外链样式撑破页面三栏布局 */
-export function MailHtmlBody({ html }: Props) {
+export function MailHtmlBody({ html, onOpenLink }: Props) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -31,7 +32,8 @@ export function MailHtmlBody({ html }: Props) {
       iframe { max-width: 100% !important; }
       table { max-width: 100% !important; border-collapse: collapse; }
       td, th { word-break: break-word; }
-      a { color: #5e5ce6; }
+      a { color: #5e5ce6; cursor: pointer; }
+      a:hover { text-decoration: underline; }
       pre, code { white-space: pre-wrap; word-break: break-word; }
     `;
 
@@ -40,6 +42,18 @@ export function MailHtmlBody({ html }: Props) {
       `<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_blank"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div class="mail-root">${html}</div><style>${baseStyles}</style></body></html>`,
     );
     doc.close();
+
+    const handleLinkClick = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const link = target?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!link) return;
+      const rawHref = link.getAttribute('href') || '';
+      if (!rawHref || rawHref.startsWith('#')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenLink?.(link.href || rawHref);
+    };
+    doc.addEventListener('click', handleLinkClick, true);
 
     const fitHeight = () => {
       const body = doc.body;
@@ -75,12 +89,13 @@ export function MailHtmlBody({ html }: Props) {
       window.clearInterval(interval);
       window.clearTimeout(stopInterval);
       ro?.disconnect();
+      doc.removeEventListener('click', handleLinkClick, true);
       imgs.forEach((img) => {
         img.removeEventListener('load', fitHeight);
         img.removeEventListener('error', fitHeight);
       });
     };
-  }, [html]);
+  }, [html, onOpenLink]);
 
   return (
     <iframe

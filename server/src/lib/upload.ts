@@ -9,6 +9,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const UPLOAD_ROOT = path.resolve(__dirname, '..', '..', 'uploads');
 fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 
+function uniqueRoots(roots: string[]) {
+  return Array.from(new Set(roots.map((root) => path.resolve(root))));
+}
+
+function uploadRootCandidates() {
+  return uniqueRoots([
+    UPLOAD_ROOT,
+    path.resolve(UPLOAD_ROOT, '..', 'dist', 'uploads'),
+    path.resolve(process.cwd(), 'uploads'),
+    path.resolve(process.cwd(), 'server', 'uploads'),
+  ]);
+}
+
 const yearMonth = () => new Date().toISOString().slice(0, 7);
 
 function safeExt(originalName: string) {
@@ -106,6 +119,22 @@ export function resolveUploadPath(storedName: string) {
   const abs = path.resolve(UPLOAD_ROOT, storedName);
   if (abs !== UPLOAD_ROOT && !abs.startsWith(UPLOAD_ROOT + path.sep)) return null;
   return abs;
+}
+
+function resolveUploadPathIn(root: string, storedName: string) {
+  const normalizedRoot = path.resolve(root);
+  const abs = path.resolve(normalizedRoot, storedName);
+  if (abs !== normalizedRoot && !abs.startsWith(normalizedRoot + path.sep)) return null;
+  return abs;
+}
+
+export function resolveExistingUploadPath(storedName: string) {
+  if (!resolveUploadPath(storedName)) return null;
+  for (const root of uploadRootCandidates()) {
+    const abs = resolveUploadPathIn(root, storedName);
+    if (abs && fs.existsSync(abs)) return abs;
+  }
+  return resolveUploadPath(storedName);
 }
 
 export { normalizeFilename };

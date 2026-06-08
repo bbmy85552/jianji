@@ -5,7 +5,14 @@ import { prisma } from '../prisma.js';
 import { asyncHandler, HttpError } from '../lib/asyncHandler.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { requireEmailVerified } from '../middleware/requireEmailVerified.js';
-import { normalizeFilename, resolveUploadPath, storedRelative, uploadAny, uploadImage } from '../lib/upload.js';
+import {
+  normalizeFilename,
+  resolveExistingUploadPath,
+  resolveUploadPath,
+  storedRelative,
+  uploadAny,
+  uploadImage,
+} from '../lib/upload.js';
 import { contentDispositionAttachment } from '../lib/filename.js';
 
 export const attachmentRouter = Router();
@@ -91,7 +98,7 @@ attachmentRouter.get(
     const shareToken = (req.query.st as string | undefined) || undefined;
     const ok = await canReadAttachment(userId, att, shareToken);
     if (!ok) throw new HttpError(403, '无权访问', 'FORBIDDEN');
-    const abs = resolveUploadPath(att.storedName);
+    const abs = resolveExistingUploadPath(att.storedName);
     if (!abs || !fs.existsSync(abs)) {
       throw new HttpError(404, '文件已丢失', 'FILE_MISSING');
     }
