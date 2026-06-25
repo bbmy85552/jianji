@@ -3,6 +3,28 @@ import { useParams } from 'react-router-dom';
 import { api, asApiError } from '../../lib/api';
 import type { PublicFormDetail } from '../../lib/types';
 
+interface ChoiceOption {
+  label: string;
+  value: string;
+}
+
+function normalizeChoices(choices: unknown): ChoiceOption[] {
+  if (!Array.isArray(choices)) return [];
+  return choices
+    .map((choice) => {
+      if (typeof choice === 'string') return { label: choice, value: choice };
+      if (choice && typeof choice === 'object') {
+        const item = choice as { label?: unknown; value?: unknown };
+        const value = item.value == null ? '' : String(item.value);
+        const label = item.label == null ? value : String(item.label);
+        if (!value && !label) return null;
+        return { label: label || value, value: value || label };
+      }
+      return null;
+    })
+    .filter((choice): choice is ChoiceOption => !!choice);
+}
+
 export function PublicFormPage() {
   const { token } = useParams<{ token: string }>();
   const [form, setForm] = useState<PublicFormDetail | null>(null);
@@ -163,7 +185,7 @@ function FormInput({
     );
   }
   if (field.type === 'select' || field.type === 'multiselect') {
-    const opts = (field.options.choices as { label: string; value: string }[] | undefined) || [];
+    const opts = normalizeChoices(field.options.choices);
     if (opts.length === 0) {
       return (
         <input
