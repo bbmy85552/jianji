@@ -168,6 +168,14 @@ html[data-theme='dark'] .divide-black\/5 > :not([hidden]) ~ :not([hidden]) {
   font-weight: 600;
   margin: 1em 0 0.4em;
 }
+.rich-editor .ProseMirror h1,
+.rich-editor .ProseMirror h2,
+.rich-editor .ProseMirror h3,
+.rich-editor .ProseMirror h4,
+.rich-editor .ProseMirror h5,
+.rich-editor .ProseMirror h6 {
+  scroll-margin-top: 96px;
+}
 .rich-editor .ProseMirror p {
   margin: 0.4em 0;
 }

@@ -5,7 +5,9 @@ import { api, asApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { useUiStore } from '../../store/ui';
 import { RichEditor } from '../../editor/Editor';
+import { DocumentToc } from '../../components/docs/DocumentToc';
 import type { TableField, TableRecord } from '../../lib/types';
+import type { EditorHeading } from '../../editor/Editor';
 
 interface SharePayload {
   resourceType: 'doc' | 'table';
@@ -31,6 +33,7 @@ export function SharePage() {
   const [data, setData] = useState<SharePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [headings, setHeadings] = useState<EditorHeading[]>([]);
 
   useEffect(() => {
     if (!token) return;
@@ -123,20 +126,24 @@ export function SharePage() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-8 py-6">
         {data.resourceType === 'doc' && data.doc && (
-          <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-6 sm:p-10">
-            <div className="flex items-center gap-2 text-xs text-text-secondary mb-2">
-              <FileText size={14} />
-              {data.doc.createdBy.name} · 更新于 {new Date(data.doc.updatedAt).toLocaleString()}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="bg-white border border-black/5 rounded-2xl shadow-sm p-6 sm:p-10">
+              <div className="flex items-center gap-2 text-xs text-text-secondary mb-2">
+                <FileText size={14} />
+                {data.doc.createdBy.name} · 更新于 {new Date(data.doc.updatedAt).toLocaleString()}
+              </div>
+              <h1 className="text-3xl sm:text-[36px] font-serif font-bold text-text-primary mb-6">
+                {data.doc.title}
+              </h1>
+              <RichEditor
+                initialContent={data.doc.contentJson}
+                onChange={() => {}}
+                onHeadingsChange={setHeadings}
+                fontFamilies={[]}
+                editable={false}
+              />
             </div>
-            <h1 className="text-3xl sm:text-[36px] font-serif font-bold text-text-primary mb-6">
-              {data.doc.title}
-            </h1>
-            <RichEditor
-              initialContent={data.doc.contentJson}
-              onChange={() => {}}
-              fontFamilies={[]}
-              editable={false}
-            />
+            <DocumentToc headings={headings} />
           </div>
         )}
         {data.resourceType === 'table' && data.table && (

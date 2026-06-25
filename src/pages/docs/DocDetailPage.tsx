@@ -20,7 +20,9 @@ import type { Attachment, DocAccess, DocDetail, DocumentComment } from '../../li
 import { ShareDialog } from '../../components/ShareDialog';
 import { VersionDrawer } from '../../components/VersionDrawer';
 import { PresenceIndicator } from '../../components/PresenceIndicator';
+import { DocumentToc } from '../../components/docs/DocumentToc';
 import { displayFilename } from '../../lib/filename';
+import type { EditorHeading } from '../../editor/Editor';
 
 interface BuiltinFont {
   family: string;
@@ -76,6 +78,7 @@ export function DocDetailPage() {
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
   const [shareOpen, setShareOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
+  const [headings, setHeadings] = useState<EditorHeading[]>([]);
   const editorRef = useRef<RichEditorRef>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
@@ -537,76 +540,80 @@ export function DocDetailPage() {
       </div>
 
       {doc && (
-        <div className="doc-print-area bg-paper-white rounded-2xl shadow-sm border border-black/5 p-4 sm:p-8 lg:p-12">
-          <input
-            value={title}
-            onChange={(e) => handleTitle(e.target.value)}
-            placeholder="未命名文档"
-            disabled={!canWrite}
-            className="w-full text-3xl sm:text-[40px] font-serif font-bold text-text-primary mb-6 bg-transparent outline-none placeholder-black/20 disabled:opacity-90"
-          />
-          <RichEditor
-            ref={editorRef}
-            initialContent={initial}
-            onChange={handleContent}
-            fontFamilies={fonts}
-            editable={canWrite}
-            handlers={
-              canWrite
-                ? {
-                    onUploadImage: () => imageInputRef.current?.click(),
-                    onUploadAttachment: () => attachInputRef.current?.click(),
-                    onImportFile: () => importInputRef.current?.click(),
-                  }
-                : undefined
-            }
-          />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="doc-print-area bg-paper-white rounded-2xl shadow-sm border border-black/5 p-4 sm:p-8 lg:p-12">
+            <input
+              value={title}
+              onChange={(e) => handleTitle(e.target.value)}
+              placeholder="未命名文档"
+              disabled={!canWrite}
+              className="w-full text-3xl sm:text-[40px] font-serif font-bold text-text-primary mb-6 bg-transparent outline-none placeholder-black/20 disabled:opacity-90"
+            />
+            <RichEditor
+              ref={editorRef}
+              initialContent={initial}
+              onChange={handleContent}
+              onHeadingsChange={setHeadings}
+              fontFamilies={fonts}
+              editable={canWrite}
+              handlers={
+                canWrite
+                  ? {
+                      onUploadImage: () => imageInputRef.current?.click(),
+                      onUploadAttachment: () => attachInputRef.current?.click(),
+                      onImportFile: () => importInputRef.current?.click(),
+                    }
+                  : undefined
+              }
+            />
 
-          {attachments.length > 0 && (
-            <div className="print-attachments mt-6 pt-6 border-t border-black/5">
-              <div className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
-                <Paperclip size={14} /> 文档附件
-              </div>
-              <ul className="space-y-2">
-                {attachments.map((a) => (
-                  <li
-                    key={a.id}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-black/[0.03] group"
-                  >
-                    {a.mimeType.startsWith('image/') ? (
-                      <img src={a.url} alt={displayFilename(a.originalName)} className="w-10 h-10 rounded object-cover" />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-liquid-indigo/10 text-liquid-indigo flex items-center justify-center">
-                        <Paperclip size={16} />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0 text-sm">
-                        <div className="font-medium text-text-primary truncate">{displayFilename(a.originalName)}</div>
-                      <div className="text-xs text-text-secondary">
-                        {(a.size / 1024).toFixed(1)} KB · {new Date(a.createdAt).toLocaleString()}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => downloadAttachment(a)}
-                      className="p-1.5 text-text-secondary hover:text-liquid-indigo"
-                      title="下载"
+            {attachments.length > 0 && (
+              <div className="print-attachments mt-6 pt-6 border-t border-black/5">
+                <div className="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2">
+                  <Paperclip size={14} /> 文档附件
+                </div>
+                <ul className="space-y-2">
+                  {attachments.map((a) => (
+                    <li
+                      key={a.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-black/[0.03] group"
                     >
-                      <Download size={14} />
-                    </button>
-                    {canWrite && (
+                      {a.mimeType.startsWith('image/') ? (
+                        <img src={a.url} alt={displayFilename(a.originalName)} className="w-10 h-10 rounded object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded bg-liquid-indigo/10 text-liquid-indigo flex items-center justify-center">
+                          <Paperclip size={16} />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 text-sm">
+                          <div className="font-medium text-text-primary truncate">{displayFilename(a.originalName)}</div>
+                        <div className="text-xs text-text-secondary">
+                          {(a.size / 1024).toFixed(1)} KB · {new Date(a.createdAt).toLocaleString()}
+                        </div>
+                      </div>
                       <button
-                        onClick={() => removeAttachment(a)}
-                        className="p-1.5 text-text-secondary hover:text-red-500"
+                        type="button"
+                        onClick={() => downloadAttachment(a)}
+                        className="p-1.5 text-text-secondary hover:text-liquid-indigo"
+                        title="下载"
                       >
-                        <Trash2 size={14} />
+                        <Download size={14} />
                       </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+                      {canWrite && (
+                        <button
+                          onClick={() => removeAttachment(a)}
+                          className="p-1.5 text-text-secondary hover:text-red-500"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+          <DocumentToc headings={headings} />
         </div>
       )}
 

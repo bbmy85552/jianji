@@ -30,6 +30,7 @@ interface Props {
   fontFamilies: string[];
   editable?: boolean;
   handlers?: EditorToolbarHandlers;
+  onHeadingsChange?: (headings: EditorHeading[]) => void;
 }
 
 export interface RichEditorRef {
@@ -37,12 +38,53 @@ export interface RichEditorRef {
   setContent: (content: string) => void;
 }
 
+export interface EditorHeading {
+  id: string;
+  level: number;
+  text: string;
+}
+
+function slugifyHeading(text: string) {
+  return (
+    text
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, '-')
+      .replace(/[^\p{L}\p{N}-]+/gu, '')
+      .replace(/^-+|-+$/g, '') || 'heading'
+  );
+}
+
+function readHeadings(editor: TiptapEditor | null): EditorHeading[] {
+  if (!editor) return [];
+  const seen = new Map<string, number>();
+  return Array.from(editor.view.dom.querySelectorAll('h1,h2,h3,h4,h5,h6')).flatMap((node) => {
+    const element = node as HTMLElement;
+    const text = element.textContent?.trim() ?? '';
+    if (!text) return [];
+    const baseId = slugifyHeading(text);
+    const next = seen.get(baseId) ?? 0;
+    seen.set(baseId, next + 1);
+    const id = next === 0 ? baseId : `${baseId}-${next + 1}`;
+    element.id = id;
+    return [{ id, level: Number(element.tagName.slice(1)), text }];
+  });
+}
+
 export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
-  { initialContent, onChange, fontFamilies, editable = true, handlers },
+  { initialContent, onChange, fontFamilies, editable = true, handlers, onHeadingsChange },
   ref,
 ) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onHeadingsChangeRef = useRef(onHeadingsChange);
+  onHeadingsChangeRef.current = onHeadingsChange;
+
+  const syncHeadings = (editor: TiptapEditor | null) => {
+    window.requestAnimationFrame(() => {
+      onHeadingsChangeRef.current?.(readHeadings(editor));
+    });
+  };
 
   const initialContentInput = useMemo(() => {
     if (!initialContent) return '';
@@ -81,8 +123,12 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
     ],
     content: initialContentInput,
     editable,
+    onCreate: ({ editor }) => {
+      syncHeadings(editor);
+    },
     onUpdate: ({ editor }) => {
       onChangeRef.current(editor.getHTML());
+      syncHeadings(editor);
       setCounts({
         characters: editor.storage.characterCount?.characters() ?? 0,
         words: editor.storage.characterCount?.words() ?? 0,
@@ -131,6 +177,7 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
             })()
           : content;
         editor.commands.setContent(v, true);
+        syncHeadings(editor);
       },
     }),
     [editor],
@@ -140,6 +187,10 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
     if (!editor) return;
     editor.setEditable(editable);
   }, [editor, editable]);
+
+  useEffect(() => {
+    syncHeadings(editor);
+  }, [editor, initialContent]);
 
   const toolbarHandlers: EditorToolbarHandlers = {
     ...handlers,
