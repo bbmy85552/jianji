@@ -199,13 +199,17 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
 
   return (
     <div className="rich-editor">
-      <EditorToolbar editor={editor} fontFamilies={fontFamilies} handlers={toolbarHandlers} />
+      {editable && (
+        <EditorToolbar editor={editor} fontFamilies={fontFamilies} handlers={toolbarHandlers} />
+      )}
       <EditorContent editor={editor} className="ProseMirror-host" />
-      <div className="editor-status no-print text-xs text-text-secondary mt-2 px-1 flex items-center justify-end gap-3">
-        <span>{counts.words} 词</span>
-        <span>{counts.characters} 字符</span>
-      </div>
-      <FindReplacePanel editor={editor} open={findOpen} onClose={() => setFindOpen(false)} />
+      {editable && (
+        <div className="editor-status no-print text-xs text-text-secondary mt-2 px-1 flex items-center justify-end gap-3">
+          <span>{counts.words} 词</span>
+          <span>{counts.characters} 字符</span>
+        </div>
+      )}
+      {editable && <FindReplacePanel editor={editor} open={findOpen} onClose={() => setFindOpen(false)} />}
     </div>
   );
 });
