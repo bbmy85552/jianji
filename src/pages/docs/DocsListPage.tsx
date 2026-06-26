@@ -75,7 +75,7 @@ export function DocsListPage() {
   );
   const [createOpen, setCreateOpen] = useState<{
     mode: 'create' | 'import' | 'folder';
-    file?: File;
+    files?: File[];
     parentId?: string | null;
   } | null>(null);
   const [moveTarget, setMoveTarget] = useState<DocNode | null>(null);
@@ -86,6 +86,8 @@ export function DocsListPage() {
   const [createKind, setCreateKind] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
   const [createTitle, setCreateTitle] = useState('未命名文档');
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [importIndex, setImportIndex] = useState(0);
+  const [importFailures, setImportFailures] = useState<string[]>([]);
   const navigate = useNavigate();
   const showToast = useUiStore((s) => s.showToast);
   const confirmDialog = useUiStore((s) => s.confirmDialog);
@@ -117,14 +119,43 @@ export function DocsListPage() {
     if (!createOpen || createSubmittingRef.current) return;
     createSubmittingRef.current = true;
     setCreateSubmitting(true);
+    setImportIndex(0);
+    setImportFailures([]);
     try {
-      if (createOpen.mode === 'import' && createOpen.file) {
-        const data = await uploadFile<{ doc: DocNode }>('/docs/import', createOpen.file, {
-          workspaceKind: createKind,
-        });
-        showToast(`已导入：${data.doc.title}`, 'success');
+      if (createOpen.mode === 'import') {
+        const files = createOpen.files ?? [];
+        if (files.length === 0) return;
+        const imported: DocNode[] = [];
+        const failed: string[] = [];
+
+        for (const [index, file] of files.entries()) {
+          setImportIndex(index);
+          try {
+            const data = await uploadFile<{ doc: DocNode }>('/docs/import', file, {
+              workspaceKind: createKind,
+            });
+            imported.push(data.doc);
+          } catch (err) {
+            failed.push(`${file.name}：${asApiError(err).error}`);
+          }
+        }
+
+        setImportFailures(failed);
+        if (imported.length > 0) {
+          await load();
+        }
+        if (failed.length > 0) {
+          showToast(`已导入 ${imported.length} 个，失败 ${failed.length} 个`, 'error');
+          return;
+        }
+        showToast(
+          imported.length === 1 ? `已导入：${imported[0].title}` : `已导入 ${imported.length} 个文档`,
+          'success',
+        );
         setCreateOpen(null);
-        navigate(`/app/docs/${data.doc.id}`);
+        if (imported.length === 1) {
+          navigate(`/app/docs/${imported[0].id}`);
+        }
       } else {
         const { data } = await api.post<{ doc: DocNode }>('/docs', {
           workspaceKind: createOpen.mode === 'folder' ? 'PUBLIC' : createKind,
@@ -360,13 +391,14 @@ export function DocsListPage() {
               role="tooltip"
               className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-text-secondary shadow-lg opacity-0 translate-y-1 transition-all group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0"
             >
-              支持 Word (.docx)、Markdown (.md/.markdown)、纯文本 (.txt)
+              支持批量选择 Word (.docx)、Markdown (.md/.markdown)、纯文本 (.txt)
             </div>
           </div>
           <button
             onClick={() => {
               setCreateKind(tab === 'public' ? 'PUBLIC' : 'PRIVATE');
               setCreateTitle('未命名文档');
+              setImportFailures([]);
               setCreateOpen({ mode: 'create' });
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-liquid-indigo text-white text-sm font-medium hover:bg-primary transition-colors shadow-md shadow-liquid-indigo/20"
@@ -380,12 +412,15 @@ export function DocsListPage() {
         ref={importInputRef}
         type="file"
         accept=".docx,.md,.markdown,.txt"
+        multiple
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length > 0) {
             setCreateKind(tab === 'public' ? 'PUBLIC' : 'PRIVATE');
-            setCreateOpen({ mode: 'import', file });
+            setImportIndex(0);
+            setImportFailures([]);
+            setCreateOpen({ mode: 'import', files });
           }
           e.target.value = '';
         }}
@@ -453,6 +488,7 @@ export function DocsListPage() {
             onClick={() => {
               setCreateKind('PUBLIC');
               setCreateTitle('新建文件夹');
+              setImportFailures([]);
               setCreateOpen({ mode: 'folder', parentId: publicFolderId });
             }}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-white/70 text-sm text-text-secondary hover:bg-white hover:text-text-primary"
@@ -485,6 +521,7 @@ export function DocsListPage() {
                 ? (parent) => {
                     setCreateKind(tab === 'public' ? 'PUBLIC' : 'PRIVATE');
                     setCreateTitle('未命名文档');
+                    setImportFailures([]);
                     setCreateOpen({
                       mode: 'create',
                       parentId: parent ? parent.id : null,
@@ -694,9 +731,10 @@ export function DocsListPage() {
               <div className="mt-1 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setCreateKind('PRIVATE')}
+                  disabled={createSubmitting}
                   className={`text-left p-3 rounded-xl border ${
                     createKind === 'PRIVATE' ? 'border-liquid-indigo bg-liquid-indigo/5' : 'border-black/10'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Lock size={14} /> 我的私人知识库
@@ -705,9 +743,10 @@ export function DocsListPage() {
                 </button>
                 <button
                   onClick={() => setCreateKind('PUBLIC')}
+                  disabled={createSubmitting}
                   className={`text-left p-3 rounded-xl border ${
                     createKind === 'PUBLIC' ? 'border-liquid-indigo bg-liquid-indigo/5' : 'border-black/10'
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <div className="flex items-center gap-2 text-sm font-medium">
                     <Globe size={14} /> 公共知识库
@@ -719,9 +758,39 @@ export function DocsListPage() {
               </div>
             </div>
             )}
-            {createOpen.mode === 'import' && createOpen.file && (
-              <div className="text-xs text-text-secondary border border-black/10 rounded p-2">
-                文件：{createOpen.file.name}
+            {createOpen.mode === 'import' && createOpen.files && (
+              <div className="space-y-2 rounded-xl border border-black/10 p-3">
+                <div className="flex items-center justify-between text-xs text-text-secondary">
+                  <span>待导入文件</span>
+                  <span>
+                    {createSubmitting
+                      ? `${Math.min(importIndex + 1, createOpen.files.length)} / ${createOpen.files.length}`
+                      : `${createOpen.files.length} 个`}
+                  </span>
+                </div>
+                <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                  {createOpen.files.map((file, index) => (
+                    <div
+                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                      className="flex items-center gap-2 rounded-lg bg-black/[0.03] px-2 py-1.5 text-xs text-text-secondary"
+                    >
+                      {createSubmitting && index === importIndex ? (
+                        <Loader2 size={12} className="animate-spin text-liquid-indigo" />
+                      ) : (
+                        <FileText size={12} />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                      <span>{(file.size / 1024).toFixed(1)} KB</span>
+                    </div>
+                  ))}
+                </div>
+                {importFailures.length > 0 && (
+                  <div className="space-y-1 rounded-lg bg-red-50 px-2 py-2 text-xs text-red-600">
+                    {importFailures.map((failure) => (
+                      <div key={failure}>{failure}</div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             <div className="flex justify-end gap-2 pt-2">
@@ -730,17 +799,19 @@ export function DocsListPage() {
                 disabled={createSubmitting}
                 className="px-3 py-1.5 rounded-lg border border-black/10 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
-                取消
+                {importFailures.length > 0 ? '关闭' : '取消'}
               </button>
               <button
                 onClick={submitCreate}
-                disabled={createSubmitting}
+                disabled={createSubmitting || importFailures.length > 0}
                 className="inline-flex min-w-20 items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-liquid-indigo text-white text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {createSubmitting && <Loader2 size={14} className="animate-spin" />}
                 {createSubmitting
                   ? createOpen.mode === 'import'
-                    ? '导入中…'
+                    ? createOpen.files && createOpen.files.length > 1
+                      ? `导入中 ${Math.min(importIndex + 1, createOpen.files.length)}/${createOpen.files.length}`
+                      : '导入中…'
                     : '创建中…'
                   : createOpen.mode === 'import'
                     ? '导入'
