@@ -16,6 +16,7 @@ import {
   Star,
   LayoutGrid,
   ListTree,
+  Loader2,
 } from 'lucide-react';
 import { api, asApiError, uploadFile } from '../../lib/api';
 import { useUiStore } from '../../store/ui';
@@ -84,12 +85,14 @@ export function DocsListPage() {
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [createKind, setCreateKind] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
   const [createTitle, setCreateTitle] = useState('未命名文档');
+  const [createSubmitting, setCreateSubmitting] = useState(false);
   const navigate = useNavigate();
   const showToast = useUiStore((s) => s.showToast);
   const confirmDialog = useUiStore((s) => s.confirmDialog);
   const promptDialog = useUiStore((s) => s.promptDialog);
   const user = useAuthStore((s) => s.user);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const createSubmittingRef = useRef(false);
 
   useEffect(() => {
     localStorage.setItem('docs.layout', layout);
@@ -111,7 +114,9 @@ export function DocsListPage() {
   }, [load]);
 
   const submitCreate = async () => {
-    if (!createOpen) return;
+    if (!createOpen || createSubmittingRef.current) return;
+    createSubmittingRef.current = true;
+    setCreateSubmitting(true);
     try {
       if (createOpen.mode === 'import' && createOpen.file) {
         const data = await uploadFile<{ doc: DocNode }>('/docs/import', createOpen.file, {
@@ -139,6 +144,9 @@ export function DocsListPage() {
       }
     } catch (err) {
       showToast(asApiError(err).error, 'error');
+    } finally {
+      createSubmittingRef.current = false;
+      setCreateSubmitting(false);
     }
   };
 
@@ -337,11 +345,15 @@ export function DocsListPage() {
           </div>
           <div className="relative group">
             <button
-              onClick={() => importInputRef.current?.click()}
+              onClick={() => {
+                if (!createSubmitting) importInputRef.current?.click();
+              }}
+              disabled={createSubmitting}
               aria-describedby="docs-import-file-tip"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-black/10 text-sm text-text-secondary hover:bg-black/5"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-black/10 text-sm text-text-secondary hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Upload size={16} /> 导入文件
+              {createSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              {createSubmitting ? '处理中…' : '导入文件'}
             </button>
             <div
               id="docs-import-file-tip"
@@ -649,7 +661,9 @@ export function DocsListPage() {
               ? '新建文件夹'
               : '新建文档'
         }
-        onClose={() => setCreateOpen(null)}
+        onClose={() => {
+          if (!createSubmitting) setCreateOpen(null);
+        }}
       >
         {createOpen && (
           <div className="space-y-3">
@@ -713,15 +727,24 @@ export function DocsListPage() {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setCreateOpen(null)}
-                className="px-3 py-1.5 rounded-lg border border-black/10 text-sm"
+                disabled={createSubmitting}
+                className="px-3 py-1.5 rounded-lg border border-black/10 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
                 取消
               </button>
               <button
                 onClick={submitCreate}
-                className="px-4 py-1.5 rounded-lg bg-liquid-indigo text-white text-sm"
+                disabled={createSubmitting}
+                className="inline-flex min-w-20 items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-liquid-indigo text-white text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {createOpen.mode === 'import' ? '导入' : '创建'}
+                {createSubmitting && <Loader2 size={14} className="animate-spin" />}
+                {createSubmitting
+                  ? createOpen.mode === 'import'
+                    ? '导入中…'
+                    : '创建中…'
+                  : createOpen.mode === 'import'
+                    ? '导入'
+                    : '创建'}
               </button>
             </div>
           </div>

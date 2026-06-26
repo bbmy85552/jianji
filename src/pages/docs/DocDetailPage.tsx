@@ -79,12 +79,14 @@ export function DocDetailPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [versionOpen, setVersionOpen] = useState(false);
   const [headings, setHeadings] = useState<EditorHeading[]>([]);
+  const [uploadBusy, setUploadBusy] = useState<'image' | 'attachment' | 'import' | null>(null);
   const editorRef = useRef<RichEditorRef>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const saveTimerRef = useRef<number | null>(null);
   const draftRef = useRef<{ title?: string; contentJson?: string }>({});
+  const uploadBusyRef = useRef(false);
 
   const canWrite = access.canWrite;
   const canDelete = access.canDelete;
@@ -201,7 +203,9 @@ export function DocDetailPage() {
   };
 
   const insertImage = async (file: File) => {
-    if (!id || !canWrite) return;
+    if (!id || !canWrite || uploadBusyRef.current) return;
+    uploadBusyRef.current = true;
+    setUploadBusy('image');
     try {
       const data = await uploadFile<{ attachment: Attachment }>(
         '/attachments/upload-image',
@@ -217,11 +221,16 @@ export function DocDetailPage() {
       showToast('图片已插入', 'success');
     } catch (err) {
       showToast(asApiError(err).error, 'error');
+    } finally {
+      uploadBusyRef.current = false;
+      setUploadBusy(null);
     }
   };
 
   const insertAttachment = async (file: File) => {
-    if (!id || !canWrite) return;
+    if (!id || !canWrite || uploadBusyRef.current) return;
+    uploadBusyRef.current = true;
+    setUploadBusy('attachment');
     try {
       const data = await uploadFile<{ attachment: Attachment }>(
         '/attachments/upload',
@@ -241,11 +250,16 @@ export function DocDetailPage() {
       showToast('附件已插入', 'success');
     } catch (err) {
       showToast(asApiError(err).error, 'error');
+    } finally {
+      uploadBusyRef.current = false;
+      setUploadBusy(null);
     }
   };
 
   const importDoc = async (file: File) => {
-    if (!doc) return;
+    if (!doc || uploadBusyRef.current) return;
+    uploadBusyRef.current = true;
+    setUploadBusy('import');
     try {
       const data = await uploadFile<{ doc: DocDetail }>('/docs/import', file, {
         workspaceId: doc.workspaceId,
@@ -254,6 +268,9 @@ export function DocDetailPage() {
       navigate(`/app/docs/${data.doc.id}`);
     } catch (err) {
       showToast(asApiError(err).error, 'error');
+    } finally {
+      uploadBusyRef.current = false;
+      setUploadBusy(null);
     }
   };
 
@@ -446,6 +463,11 @@ export function DocDetailPage() {
           >
             {!canWrite ? '只读' : saveStatus === 'saved' ? '已保存' : saveStatus === 'saving' ? '正在保存…' : '待保存'}
           </span>
+          {uploadBusy && (
+            <span className="text-xs px-2 py-1 rounded-full bg-liquid-indigo/10 text-liquid-indigo">
+              {uploadBusy === 'image' ? '图片上传中…' : uploadBusy === 'attachment' ? '附件上传中…' : '导入中…'}
+            </span>
+          )}
           {doc && (
             <>
               <button
@@ -557,7 +579,7 @@ export function DocDetailPage() {
               fontFamilies={fonts}
               editable={canWrite}
               handlers={
-                canWrite
+                canWrite && !uploadBusy
                   ? {
                       onUploadImage: () => imageInputRef.current?.click(),
                       onUploadAttachment: () => attachInputRef.current?.click(),
@@ -621,6 +643,7 @@ export function DocDetailPage() {
         ref={imageInputRef}
         type="file"
         accept="image/*"
+        disabled={!!uploadBusy}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -631,6 +654,7 @@ export function DocDetailPage() {
       <input
         ref={attachInputRef}
         type="file"
+        disabled={!!uploadBusy}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -642,6 +666,7 @@ export function DocDetailPage() {
         ref={importInputRef}
         type="file"
         accept=".docx,.md,.markdown,.txt"
+        disabled={!!uploadBusy}
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

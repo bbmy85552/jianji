@@ -87,6 +87,7 @@ export function TableDetailPage() {
   const [newFormRequired, setNewFormRequired] = useState<Set<string>>(new Set());
   const uploadResolverRef = useRef<((att: Attachment | null) => void) | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const uploadBusyRef = useRef(false);
   const canWrite = role === 'OWNER' || role === 'EDITOR';
 
   const load = useCallback(async () => {
@@ -109,6 +110,7 @@ export function TableDetailPage() {
   }, [id, navigate, showToast]);
 
   const requestUpload = useCallback((): Promise<Attachment | null> => {
+    if (uploadBusyRef.current) return Promise.resolve(null);
     return new Promise((resolve) => {
       uploadResolverRef.current = resolve;
       uploadInputRef.current?.click();
@@ -118,10 +120,15 @@ export function TableDetailPage() {
   const onUploadFile = async (file: File | undefined) => {
     const resolver = uploadResolverRef.current;
     uploadResolverRef.current = null;
+    if (uploadBusyRef.current) {
+      resolver?.(null);
+      return;
+    }
     if (!file || !id) {
       resolver?.(null);
       return;
     }
+    uploadBusyRef.current = true;
     try {
       const data = await uploadFile<{ attachment: Attachment }>(
         '/attachments/upload',
@@ -132,6 +139,8 @@ export function TableDetailPage() {
     } catch (err) {
       showToast(asApiError(err).error, 'error');
       resolver?.(null);
+    } finally {
+      uploadBusyRef.current = false;
     }
   };
 
