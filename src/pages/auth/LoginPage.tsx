@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthLayout, Input, PrimaryButton } from './AuthLayout';
 import { api, asApiError } from '../../lib/api';
@@ -9,6 +9,7 @@ import {
   readRememberedLogin,
   saveRememberedLogin,
 } from '../../lib/rememberedLogin';
+import { DEFAULT_PUBLIC_SETTINGS, fetchPublicSettings } from '../../lib/publicSettings';
 
 export function LoginPage() {
   const remembered = readRememberedLogin();
@@ -17,8 +18,21 @@ export function LoginPage() {
   const [rememberEmail, setRememberEmail] = useState(Boolean(remembered));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [brandName, setBrandName] = useState(DEFAULT_PUBLIC_SETTINGS.brandName);
   const setUser = useAuthStore((s) => s.setUser);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let alive = true;
+    void fetchPublicSettings()
+      .then((settings) => {
+        if (alive) setBrandName(settings.brandName);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +60,7 @@ export function LoginPage() {
   return (
     <AuthLayout
       title="欢迎回来"
-      subtitle="登录简记，开始你的工作。"
+      subtitle={`登录${brandName}，开始你的工作。`}
       footer={
         <>
           还没有账号？<Link to="/register" className="text-liquid-indigo hover:underline">注册</Link>

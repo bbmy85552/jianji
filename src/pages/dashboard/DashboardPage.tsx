@@ -5,6 +5,7 @@ import { api, asApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import { useUiStore } from '../../store/ui';
 import type { TodoItem, TodoProgress, DashboardSummary } from '../../lib/types';
+import { DEFAULT_PUBLIC_SETTINGS, fetchPublicSettings } from '../../lib/publicSettings';
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -28,6 +29,7 @@ export function DashboardPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newDate, setNewDate] = useState(toISODate(new Date()));
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [brandName, setBrandName] = useState(DEFAULT_PUBLIC_SETTINGS.brandName);
 
   const loadSummary = useCallback(async () => {
     try {
@@ -65,6 +67,9 @@ export function DashboardPage() {
   useEffect(() => {
     void loadToday();
     void loadSummary();
+    void fetchPublicSettings()
+      .then((settings) => setBrandName(settings.brandName))
+      .catch(() => undefined);
   }, [loadToday, loadSummary]);
 
   useEffect(() => {
@@ -119,7 +124,7 @@ export function DashboardPage() {
     <div className="animate-fade-in-up py-6 sm:py-8">
       <header className="mb-8">
         <h1 className="text-3xl sm:text-[40px] font-serif font-bold text-text-primary tracking-tight mb-2">
-          欢迎回来，{user?.name ?? '简记用户'}
+          欢迎回来，{user?.name ?? `${brandName}用户`}
         </h1>
         <p className="text-text-secondary">今天是 {today}，把重要的事情先完成吧。</p>
       </header>

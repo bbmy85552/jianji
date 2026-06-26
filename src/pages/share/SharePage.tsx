@@ -8,6 +8,7 @@ import { RichEditor } from '../../editor/Editor';
 import { DocumentToc } from '../../components/docs/DocumentToc';
 import type { TableField, TableRecord } from '../../lib/types';
 import type { EditorHeading } from '../../editor/Editor';
+import { DEFAULT_PUBLIC_SETTINGS, fetchPublicSettings } from '../../lib/publicSettings';
 
 interface SharePayload {
   resourceType: 'doc' | 'table';
@@ -34,13 +35,18 @@ export function SharePage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [headings, setHeadings] = useState<EditorHeading[]>([]);
+  const [brandName, setBrandName] = useState(DEFAULT_PUBLIC_SETTINGS.brandName);
 
   useEffect(() => {
     if (!token) return;
     (async () => {
       try {
-        const { data } = await api.get<SharePayload>(`/share/${token}`);
-        setData(data);
+        const [shareRes, settings] = await Promise.all([
+          api.get<SharePayload>(`/share/${token}`),
+          fetchPublicSettings().catch(() => DEFAULT_PUBLIC_SETTINGS),
+        ]);
+        setData(shareRes.data);
+        setBrandName(settings.brandName);
       } catch (err) {
         setErrorMsg(asApiError(err).error);
       } finally {
@@ -91,7 +97,7 @@ export function SharePage() {
       <header className="border-b border-black/5 bg-white/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-8 py-3 flex items-center justify-between gap-3">
           <Link to="/" className="text-sm font-semibold text-text-primary">
-            简记
+            {brandName}
           </Link>
           <div className="flex items-center gap-2 text-sm">
             <span className="text-text-secondary">

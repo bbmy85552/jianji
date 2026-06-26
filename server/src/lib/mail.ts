@@ -65,7 +65,7 @@ export async function sendMail(payload: MailPayload) {
   return { ok: true, transport: 'smtp' as const };
 }
 
-export function renderCodeMail(code: string, purpose: string, brandName = '简记') {
+export function renderCodeMail(code: string, purpose: string, brandName = '文档中心') {
   const purposeLabel: Record<string, string> = {
     register: '注册账号',
     bind_email: '绑定邮箱',

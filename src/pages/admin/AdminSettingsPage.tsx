@@ -11,7 +11,7 @@ export function AdminSettingsPage() {
     allow_public_register: 'true',
     default_workspace_name: '我的空间',
     max_upload_mb: '25',
-    brand_name: '简记',
+    brand_name: '文档中心',
     company_name: '文档中心',
     oa_url: 'https://2dqy-oa.2dqy.com/calendar',
     register_invite_code: '',
@@ -19,7 +19,7 @@ export function AdminSettingsPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [saving, setSaving] = useState(false);
   const [testTo, setTestTo] = useState('');
-  const [testSubject, setTestSubject] = useState('[简记] 测试邮件');
+  const [testSubject, setTestSubject] = useState('');
   const [testing, setTesting] = useState(false);
   const [testInfo, setTestInfo] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -342,10 +342,10 @@ export function AdminSettingsPage() {
             setTesting(true);
             setTestInfo(null);
             try {
-              const { data } = await api.post<{ ok: boolean; transport: string }>(
-                '/admin/mail/test',
-                { to: testTo, subject: testSubject },
-              );
+              const payload = testSubject.trim()
+                ? { to: testTo, subject: testSubject.trim() }
+                : { to: testTo };
+              const { data } = await api.post<{ ok: boolean; transport: string }>('/admin/mail/test', payload);
               setTestInfo(
                 data.transport === 'smtp'
                   ? `已通过 SMTP 发送到 ${testTo}`

@@ -73,7 +73,7 @@ export function createApp() {
   app.use(cookieParser());
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, name: '简记 API' });
+    res.json({ ok: true, name: 'Document Center API' });
   });
 
   fs.mkdirSync(UPLOAD_ROOT, { recursive: true });

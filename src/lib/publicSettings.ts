@@ -7,7 +7,7 @@ export interface PublicSettings {
 }
 
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
-  brandName: '简记',
+  brandName: '文档中心',
   companyName: '文档中心',
   oaUrl: 'https://2dqy-oa.2dqy.com/calendar',
 };

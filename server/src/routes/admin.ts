@@ -127,7 +127,7 @@ adminRouter.post(
   asyncHandler(async (req, res) => {
     const target = await prisma.user.findUnique({ where: { id: req.params.id } });
     if (!target) throw new HttpError(404, '用户不存在', 'NOT_FOUND');
-    const newPassword = `Jianji@${generateNumericCode(8)}`;
+    const newPassword = `Docs@${generateNumericCode(8)}`;
     await prisma.user.update({
       where: { id: target.id },
       data: { passwordHash: await hashPassword(newPassword) },
@@ -159,7 +159,7 @@ adminRouter.post(
     const email = body.email.toLowerCase();
     const exists = await prisma.user.findUnique({ where: { email } });
     if (exists) throw new HttpError(409, '该邮箱已注册', 'EMAIL_TAKEN');
-    const password = body.password ?? `Jianji@${generateNumericCode(8)}`;
+    const password = body.password ?? `Docs@${generateNumericCode(8)}`;
     const user = await prisma.user.create({
       data: {
         email,
@@ -293,7 +293,7 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   allow_public_register: 'true',
   default_workspace_name: '我的空间',
   max_upload_mb: '25',
-  brand_name: '简记',
+  brand_name: '文档中心',
   company_name: '文档中心',
   oa_url: 'https://2dqy-oa.2dqy.com/calendar',
   register_invite_code: '',

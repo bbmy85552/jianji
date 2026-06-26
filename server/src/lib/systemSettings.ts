@@ -76,7 +76,7 @@ export async function verifyRegisterInviteCode(inviteCode: string) {
 export async function getPublicBrandSettings() {
   const map = await getSystemSettingMap();
   return {
-    brandName: map[SYSTEM_SETTING_KEYS.brandName]?.trim() || '简记',
+    brandName: map[SYSTEM_SETTING_KEYS.brandName]?.trim() || '文档中心',
     companyName: map[SYSTEM_SETTING_KEYS.companyName]?.trim() || '文档中心',
     oaUrl: map[SYSTEM_SETTING_KEYS.oaUrl]?.trim() || 'https://2dqy-oa.2dqy.com/calendar',
   };
@@ -87,7 +87,7 @@ export async function getMailBrandName() {
   return (
     map[SYSTEM_SETTING_KEYS.companyName]?.trim() ||
     map[SYSTEM_SETTING_KEYS.brandName]?.trim() ||
-    '简记'
+    '文档中心'
   );
 }
 

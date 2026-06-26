@@ -13,7 +13,7 @@ void fetchPublicSettings()
     document.title = settings.brandName;
   })
   .catch(() => {
-    document.title = '简记';
+    document.title = '文档中心';
   });
 
 createRoot(document.getElementById('root')!).render(
