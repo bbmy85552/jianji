@@ -58,10 +58,12 @@ function loadGoogleScript() {
 export function GoogleSignInButton({
   text = 'continue_with',
   disabled,
+  disabledLabel = '请先填写邀请码',
   onCredential,
 }: {
   text?: 'signin_with' | 'signup_with' | 'continue_with';
   disabled?: boolean;
+  disabledLabel?: string;
   onCredential: (credential: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -118,7 +120,7 @@ export function GoogleSignInButton({
         disabled
         className="flex h-10 w-full items-center justify-center rounded-xl border border-black/10 bg-white/50 text-sm text-text-secondary opacity-60"
       >
-        请先填写邀请码
+        {disabledLabel}
       </button>
     );
   }

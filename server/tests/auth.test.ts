@@ -71,6 +71,18 @@ describe('注册与验证码', () => {
     const app = await getApp();
     await enableInviteCode();
     const email = 'invite@test.local';
+    const invalidInvite = await request(app)
+      .post('/api/auth/validate-invite')
+      .send({ inviteCode: 'wrong' });
+    expect(invalidInvite.status).toBe(403);
+    expect(invalidInvite.body.code).toBe('INVALID_INVITE_CODE');
+
+    const validInvite = await request(app)
+      .post('/api/auth/validate-invite')
+      .send({ inviteCode: TEST_INVITE_CODE });
+    expect(validInvite.status).toBe(200);
+    expect(validInvite.body.ok).toBe(true);
+
     const codeReq = await request(app)
       .post('/api/auth/register-code')
       .send({ email, inviteCode: 'wrong' });

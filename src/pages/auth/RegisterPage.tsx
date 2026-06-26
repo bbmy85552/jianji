@@ -12,6 +12,8 @@ export function RegisterPage() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [validatedInviteCode, setValidatedInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -42,11 +44,52 @@ export function RegisterPage() {
     }, 1000);
   };
 
+  const registrationEnabled = inviteStatus === 'valid' && validatedInviteCode === inviteCode.trim();
+
+  const validateInvite = async () => {
+    const trimmed = inviteCode.trim();
+    setError(null);
+    setHint(null);
+    if (!trimmed) {
+      setInviteStatus('idle');
+      setValidatedInviteCode('');
+      setError('请先填写邀请码');
+      return false;
+    }
+    setInviteStatus('checking');
+    try {
+      await api.post('/auth/validate-invite', { inviteCode: trimmed });
+      setValidatedInviteCode(trimmed);
+      setInviteStatus('valid');
+      setHint('邀请码验证通过，可以继续注册。');
+      return true;
+    } catch (err) {
+      setValidatedInviteCode('');
+      setInviteStatus('invalid');
+      setError(asApiError(err).error);
+      return false;
+    }
+  };
+
+  const ensureInviteValid = async () => {
+    if (registrationEnabled) return true;
+    return validateInvite();
+  };
+
+  const handleInviteChange = (value: string) => {
+    setInviteCode(value);
+    setValidatedInviteCode('');
+    setInviteStatus('idle');
+    setHint(null);
+    setError(null);
+  };
+
   const sendCode = async () => {
     setError(null);
     setHint(null);
-    if (!email || !inviteCode.trim()) {
-      setError(!email ? '请先填写邮箱' : '请先填写邀请码');
+    if (!(await ensureInviteValid())) return;
+    if (!email) {
+      setError('请先填写邮箱');
       return;
     }
     setSending(true);
@@ -72,6 +115,8 @@ export function RegisterPage() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setHint(null);
+    if (!(await ensureInviteValid())) return;
     setLoading(true);
     try {
       const { data } = await api.post<{ user: CurrentUser }>('/auth/register', {
@@ -93,10 +138,7 @@ export function RegisterPage() {
   const submitGoogle = async (credential: string) => {
     setError(null);
     setHint(null);
-    if (!inviteCode.trim()) {
-      setError('请先填写邀请码');
-      return;
-    }
+    if (!(await ensureInviteValid())) return;
     setLoading(true);
     try {
       const { data } = await api.post<{ user: CurrentUser }>('/auth/google', {
@@ -128,13 +170,30 @@ export function RegisterPage() {
           required
           autoComplete="off"
           value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
+          onChange={(e) => handleInviteChange(e.target.value)}
           placeholder="请输入管理员提供的邀请码"
         />
+        <div className="-mt-2 mb-5 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={inviteStatus === 'checking' || !inviteCode.trim()}
+            onClick={validateInvite}
+            className="h-10 rounded-xl border border-liquid-indigo/30 px-4 text-sm font-medium text-liquid-indigo transition hover:bg-liquid-indigo/5 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {inviteStatus === 'checking' ? '验证中…' : '验证邀请码'}
+          </button>
+          {inviteStatus === 'valid' && (
+            <span className="text-xs text-emerald-700">已通过</span>
+          )}
+          {inviteStatus === 'invalid' && (
+            <span className="text-xs text-red-600">邀请码不正确</span>
+          )}
+        </div>
         <div className="mb-5">
           <GoogleSignInButton
             text="signup_with"
-            disabled={!inviteCode.trim()}
+            disabled={!registrationEnabled || loading}
+            disabledLabel="请先验证邀请码"
             onCredential={submitGoogle}
           />
         </div>
@@ -151,6 +210,7 @@ export function RegisterPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
+          disabled={!registrationEnabled}
         />
         <div className="mb-4 flex items-end gap-2">
           <div className="flex-1">
@@ -162,12 +222,13 @@ export function RegisterPage() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
               placeholder="6 位数字"
+              disabled={!registrationEnabled}
               className="w-full px-3 py-2.5 rounded-xl border border-black/10 bg-white/70 text-sm text-text-primary outline-none focus:border-liquid-indigo focus:ring-2 focus:ring-liquid-indigo/15"
             />
           </div>
           <button
             type="button"
-            disabled={sending || countdown > 0}
+            disabled={!registrationEnabled || sending || countdown > 0}
             onClick={sendCode}
             className="shrink-0 px-3 h-[42px] rounded-xl border border-liquid-indigo/30 text-liquid-indigo text-sm font-medium hover:bg-liquid-indigo/5 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -181,6 +242,7 @@ export function RegisterPage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="你想要的展示名"
+          disabled={!registrationEnabled}
         />
         <Input
           label="密码"
@@ -192,6 +254,7 @@ export function RegisterPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="至少 8 位"
+          disabled={!registrationEnabled}
         />
         {hint && (
           <div className="mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
@@ -203,7 +266,7 @@ export function RegisterPage() {
             {error}
           </div>
         )}
-        <PrimaryButton type="submit" loading={loading}>
+        <PrimaryButton type="submit" loading={loading} disabled={!registrationEnabled}>
           注册并登录
         </PrimaryButton>
       </form>

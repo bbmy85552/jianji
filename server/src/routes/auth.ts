@@ -21,6 +21,7 @@ const passwordSchema = z
   .min(8, '密码长度不少于 8 位')
   .max(64, '密码长度不超过 64 位');
 const codeSchema = z.string().regex(/^\d{6}$/, '验证码为 6 位数字');
+const inviteCodeSchema = z.string().trim().min(1, '请输入邀请码').max(120);
 
 function clientIp(req: any) {
   return (req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip || 'unknown') as string;
@@ -64,6 +65,20 @@ function userBrief(user: { id: string; email: string; name: string; role: string
 }
 
 authRouter.post(
+  '/validate-invite',
+  asyncHandler(async (req, res) => {
+    if (!(await isPublicRegisterAllowed())) {
+      throw new HttpError(403, '当前实例已关闭注册', 'REGISTER_CLOSED');
+    }
+    const { inviteCode } = z.object({ inviteCode: inviteCodeSchema }).parse(req.body);
+    if (!(await verifyRegisterInviteCode(inviteCode))) {
+      throw new HttpError(403, '邀请码不正确', 'INVALID_INVITE_CODE');
+    }
+    res.json({ ok: true });
+  }),
+);
+
+authRouter.post(
   '/register-code',
   asyncHandler(async (req, res) => {
     if (!(await isPublicRegisterAllowed())) {
@@ -72,7 +87,7 @@ authRouter.post(
     const { email, inviteCode } = z
       .object({
         email: emailSchema,
-        inviteCode: z.string().trim().min(1, '请输入邀请码').max(120),
+        inviteCode: inviteCodeSchema,
       })
       .parse(req.body);
     if (!(await verifyRegisterInviteCode(inviteCode))) {
@@ -99,7 +114,7 @@ authRouter.post(
       .object({
         email: emailSchema,
         code: codeSchema,
-        inviteCode: z.string().trim().min(1, '请输入邀请码').max(120),
+        inviteCode: inviteCodeSchema,
         password: passwordSchema,
         name: z.string().trim().min(1, '请输入用户名').max(40),
       })
