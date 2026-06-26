@@ -10,6 +10,7 @@ import {
   saveRememberedLogin,
 } from '../../lib/rememberedLogin';
 import { DEFAULT_PUBLIC_SETTINGS, fetchPublicSettings } from '../../lib/publicSettings';
+import { GoogleSignInButton } from './GoogleSignInButton';
 
 export function LoginPage() {
   const remembered = readRememberedLogin();
@@ -57,6 +58,25 @@ export function LoginPage() {
     }
   };
 
+  const submitGoogle = async (credential: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const { data } = await api.post<{ user: CurrentUser }>('/auth/google', { credential });
+      setUser(data.user);
+      navigate('/app/dashboard', { replace: true });
+    } catch (err) {
+      const apiError = asApiError(err);
+      if (apiError.code === 'INVALID_INVITE_CODE') {
+        setError('该 Google 邮箱还没有账号，请先到注册页填写邀请码后使用 Google 注册。');
+      } else {
+        setError(apiError.error);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthLayout
       title="欢迎回来"
@@ -69,6 +89,14 @@ export function LoginPage() {
         </>
       }
     >
+      <div className="mb-5">
+        <GoogleSignInButton onCredential={submitGoogle} />
+      </div>
+      <div className="mb-5 flex items-center gap-3 text-xs text-text-secondary">
+        <span className="h-px flex-1 bg-black/10" />
+        <span>或使用邮箱登录</span>
+        <span className="h-px flex-1 bg-black/10" />
+      </div>
       <form onSubmit={submit}>
         <Input
           label="邮箱"

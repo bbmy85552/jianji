@@ -79,6 +79,7 @@ export async function getPublicBrandSettings() {
     brandName: map[SYSTEM_SETTING_KEYS.brandName]?.trim() || '文档中心',
     companyName: map[SYSTEM_SETTING_KEYS.companyName]?.trim() || '文档中心',
     oaUrl: map[SYSTEM_SETTING_KEYS.oaUrl]?.trim() || 'https://2dqy-oa.2dqy.com/calendar',
+    googleClientId: env.GOOGLE_CLIENT_ID,
   };
 }
 

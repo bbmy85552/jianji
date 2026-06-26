@@ -4,6 +4,7 @@ import { AuthLayout, Input, PrimaryButton } from './AuthLayout';
 import { api, asApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
 import type { CurrentUser } from '../../lib/types';
+import { GoogleSignInButton } from './GoogleSignInButton';
 
 export function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -89,6 +90,28 @@ export function RegisterPage() {
     }
   };
 
+  const submitGoogle = async (credential: string) => {
+    setError(null);
+    setHint(null);
+    if (!inviteCode.trim()) {
+      setError('请先填写邀请码');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await api.post<{ user: CurrentUser }>('/auth/google', {
+        credential,
+        inviteCode,
+      });
+      setUser(data.user);
+      navigate('/app/dashboard', { replace: true });
+    } catch (err) {
+      setError(asApiError(err).error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <AuthLayout
       title="创建账号"
@@ -108,6 +131,18 @@ export function RegisterPage() {
           onChange={(e) => setInviteCode(e.target.value)}
           placeholder="请输入管理员提供的邀请码"
         />
+        <div className="mb-5">
+          <GoogleSignInButton
+            text="signup_with"
+            disabled={!inviteCode.trim()}
+            onCredential={submitGoogle}
+          />
+        </div>
+        <div className="mb-5 flex items-center gap-3 text-xs text-text-secondary">
+          <span className="h-px flex-1 bg-black/10" />
+          <span>或使用邮箱验证码注册</span>
+          <span className="h-px flex-1 bg-black/10" />
+        </div>
         <Input
           label="邮箱"
           type="email"

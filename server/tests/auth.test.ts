@@ -1,13 +1,15 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { prisma } from '../src/prisma.js';
 import { getApp, readCode, resetData, TEST_INVITE_CODE } from './helpers.js';
+import { env } from '../src/env.js';
 
 beforeAll(async () => {
   await getApp();
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await resetData();
 });
 
@@ -78,6 +80,91 @@ describe('注册与验证码', () => {
       .post('/api/auth/register')
       .send({ email, code: '123456', password: 'Aa12345678', name: 'Invite', inviteCode: 'wrong' });
     expect(register.status).toBe(403);
+  });
+});
+
+describe('Google 登录', () => {
+  async function enableInviteCode() {
+    await prisma.systemSetting.upsert({
+      where: { key: 'register_invite_code' },
+      update: { value: TEST_INVITE_CODE },
+      create: { key: 'register_invite_code', value: TEST_INVITE_CODE },
+    });
+  }
+
+  function mockGoogleProfile(profile: {
+    email: string;
+    name?: string;
+    aud?: string;
+    email_verified?: boolean | string;
+    picture?: string;
+  }) {
+    env.GOOGLE_CLIENT_ID = 'test-google-client';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        aud: profile.aud ?? env.GOOGLE_CLIENT_ID,
+        email: profile.email,
+        email_verified: profile.email_verified ?? true,
+        name: profile.name ?? 'Google User',
+        picture: profile.picture ?? 'https://example.com/avatar.png',
+        sub: 'google-sub',
+      }),
+    } as Response);
+  }
+
+  it('已有相同 email 的账号可直接使用 Google 登录', async () => {
+    const app = await getApp();
+    await enableInviteCode();
+    const email = 'google-existing@test.local';
+    await request(app).post('/api/auth/register-code').send({ email, inviteCode: TEST_INVITE_CODE });
+    const code = readCode(email, 'register')!;
+    const registered = await request(app)
+      .post('/api/auth/register')
+      .send({ email, code, password: 'Aa12345678', name: 'Old Name', inviteCode: TEST_INVITE_CODE });
+    mockGoogleProfile({ email, name: 'Google Name' });
+
+    const res = await request(app).post('/api/auth/google').send({ credential: 'google-token' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.id).toBe(registered.body.user.id);
+    expect(res.body.user.email).toBe(email);
+    expect(res.headers['set-cookie']).toBeDefined();
+  });
+
+  it('新 Google 账号没有正确邀请码时不能注册', async () => {
+    const app = await getApp();
+    await enableInviteCode();
+    mockGoogleProfile({ email: 'google-new@test.local' });
+
+    const missing = await request(app).post('/api/auth/google').send({ credential: 'google-token' });
+    expect(missing.status).toBe(403);
+    expect(missing.body.code).toBe('INVALID_INVITE_CODE');
+
+    const wrong = await request(app)
+      .post('/api/auth/google')
+      .send({ credential: 'google-token', inviteCode: 'wrong' });
+    expect(wrong.status).toBe(403);
+    expect(wrong.body.code).toBe('INVALID_INVITE_CODE');
+  });
+
+  it('新 Google 账号带正确邀请码时会创建并登录', async () => {
+    const app = await getApp();
+    await enableInviteCode();
+    const email = 'google-created@test.local';
+    mockGoogleProfile({ email, name: 'Created By Google' });
+
+    const res = await request(app)
+      .post('/api/auth/google')
+      .send({ credential: 'google-token', inviteCode: TEST_INVITE_CODE });
+
+    expect(res.status).toBe(200);
+    expect(res.body.created).toBe(true);
+    expect(res.body.user.email).toBe(email);
+    expect(res.body.user.name).toBe('Created By Google');
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(user.emailVerifiedAt).toBeTruthy();
+    expect(await prisma.workspace.count({ where: { ownerId: user.id } })).toBe(1);
   });
 });
 

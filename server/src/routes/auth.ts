@@ -11,6 +11,7 @@ import { consumeVerificationCode, requestVerificationCode } from '../lib/verifyC
 import { requireAuth } from '../middleware/auth.js';
 import { hashSessionToken, revokeSessionByToken } from '../lib/session.js';
 import { isPublicRegisterAllowed, verifyRegisterInviteCode } from '../lib/systemSettings.js';
+import { verifyGoogleCredential } from '../lib/googleAuth.js';
 
 export const authRouter = Router();
 
@@ -149,6 +150,60 @@ authRouter.post(
     });
     setAuthCookie(res, token);
     res.json({ user: userBrief(user) });
+  }),
+);
+
+authRouter.post(
+  '/google',
+  asyncHandler(async (req, res) => {
+    const body = z
+      .object({
+        credential: z.string().trim().min(1),
+        inviteCode: z.string().trim().max(120).optional(),
+      })
+      .parse(req.body);
+    const profile = await verifyGoogleCredential(body.credential);
+    const existing = await prisma.user.findUnique({ where: { email: profile.email } });
+    let user = existing;
+
+    if (user) {
+      if (user.status === 'DISABLED') throw new HttpError(403, '账号已被禁用', 'USER_DISABLED');
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          avatarUrl: user.avatarUrl || profile.picture || undefined,
+          lastLoginAt: new Date(),
+        },
+      });
+    } else {
+      if (!(await isPublicRegisterAllowed())) {
+        throw new HttpError(403, '当前实例已关闭注册', 'REGISTER_CLOSED');
+      }
+      if (!body.inviteCode || !(await verifyRegisterInviteCode(body.inviteCode))) {
+        throw new HttpError(403, '邀请码不正确', 'INVALID_INVITE_CODE');
+      }
+      user = await prisma.user.create({
+        data: {
+          email: profile.email,
+          passwordHash: await hashPassword(crypto.randomBytes(32).toString('hex')),
+          name: profile.name,
+          avatarUrl: profile.picture ?? null,
+          role: 'USER',
+          status: 'ACTIVE',
+          emailVerifiedAt: new Date(),
+          lastLoginAt: new Date(),
+        },
+      });
+      await prisma.workspace.create({ data: { name: `${profile.name} 的空间`, ownerId: user.id } });
+    }
+
+    const token = await issueSessionToken(user, {
+      userAgent: clientUserAgent(req),
+      ipAddr: clientIp(req),
+    });
+    setAuthCookie(res, token);
+    res.json({ user: userBrief(user), created: !existing });
   }),
 );
 

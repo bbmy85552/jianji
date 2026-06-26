@@ -45,6 +45,9 @@ export const env = {
   MAIL_PASS: process.env.MAIL_PASS ?? '',
   MAIL_FROM: process.env.MAIL_FROM ?? '文档中心 <no-reply@jianji.local>',
 
+  GOOGLE_CLIENT_ID:
+    process.env.GOOGLE_CLIENT_ID ?? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '',
+
   CODE_TTL_SECONDS: toInt(process.env.CODE_TTL_SECONDS, 600),
   CODE_RESEND_INTERVAL_SECONDS: toInt(process.env.CODE_RESEND_INTERVAL_SECONDS, 60),
   CODE_MAX_PER_HOUR_PER_EMAIL: toInt(process.env.CODE_MAX_PER_HOUR_PER_EMAIL, 5),
