@@ -10,7 +10,7 @@ import { asyncHandler, HttpError } from '../lib/asyncHandler.js';
 import { consumeVerificationCode, requestVerificationCode } from '../lib/verifyCode.js';
 import { requireAuth } from '../middleware/auth.js';
 import { hashSessionToken, revokeSessionByToken } from '../lib/session.js';
-import { isPublicRegisterAllowed } from '../lib/systemSettings.js';
+import { isPublicRegisterAllowed, verifyRegisterInviteCode } from '../lib/systemSettings.js';
 
 export const authRouter = Router();
 
@@ -68,7 +68,15 @@ authRouter.post(
     if (!(await isPublicRegisterAllowed())) {
       throw new HttpError(403, '当前实例已关闭注册', 'REGISTER_CLOSED');
     }
-    const { email } = z.object({ email: emailSchema }).parse(req.body);
+    const { email, inviteCode } = z
+      .object({
+        email: emailSchema,
+        inviteCode: z.string().trim().min(1, '请输入邀请码').max(120),
+      })
+      .parse(req.body);
+    if (!(await verifyRegisterInviteCode(inviteCode))) {
+      throw new HttpError(403, '邀请码不正确', 'INVALID_INVITE_CODE');
+    }
     const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (exists) throw new HttpError(409, '该邮箱已注册', 'EMAIL_TAKEN');
     const result = await requestVerificationCode({
@@ -90,10 +98,14 @@ authRouter.post(
       .object({
         email: emailSchema,
         code: codeSchema,
+        inviteCode: z.string().trim().min(1, '请输入邀请码').max(120),
         password: passwordSchema,
         name: z.string().trim().min(1, '请输入用户名').max(40),
       })
       .parse(req.body);
+    if (!(await verifyRegisterInviteCode(body.inviteCode))) {
+      throw new HttpError(403, '邀请码不正确', 'INVALID_INVITE_CODE');
+    }
     const normalized = body.email.toLowerCase();
     const exists = await prisma.user.findUnique({ where: { email: normalized } });
     if (exists) throw new HttpError(409, '该邮箱已注册', 'EMAIL_TAKEN');

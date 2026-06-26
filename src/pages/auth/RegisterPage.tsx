@@ -10,6 +10,7 @@ export function RegisterPage() {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -43,15 +44,15 @@ export function RegisterPage() {
   const sendCode = async () => {
     setError(null);
     setHint(null);
-    if (!email) {
-      setError('请先填写邮箱');
+    if (!email || !inviteCode.trim()) {
+      setError(!email ? '请先填写邮箱' : '请先填写邀请码');
       return;
     }
     setSending(true);
     try {
       const { data } = await api.post<{ ok: boolean; ttlSeconds: number }>(
         '/auth/register-code',
-        { email },
+        { email, inviteCode },
       );
       setHint(`验证码已发送，有效期 ${Math.round((data.ttlSeconds ?? 600) / 60)} 分钟`);
       startCountdown(60);
@@ -77,6 +78,7 @@ export function RegisterPage() {
         name,
         password,
         code,
+        inviteCode,
       });
       setUser(data.user);
       navigate('/app/dashboard', { replace: true });
@@ -90,7 +92,7 @@ export function RegisterPage() {
   return (
     <AuthLayout
       title="创建账号"
-      subtitle="使用邮箱注册简记，10 秒完成。"
+      subtitle="使用管理员提供的邀请码注册。"
       footer={
         <>
           已有账号？<Link to="/login" className="text-liquid-indigo hover:underline">登录</Link>
@@ -98,6 +100,14 @@ export function RegisterPage() {
       }
     >
       <form onSubmit={submit}>
+        <Input
+          label="邀请码"
+          required
+          autoComplete="off"
+          value={inviteCode}
+          onChange={(e) => setInviteCode(e.target.value)}
+          placeholder="请输入管理员提供的邀请码"
+        />
         <Input
           label="邮箱"
           type="email"

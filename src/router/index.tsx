@@ -14,6 +14,7 @@ import { TablesListPage } from '../pages/tables/TablesListPage';
 import { TableDetailPage } from '../pages/tables/TableDetailPage';
 import { CalendarPage } from '../pages/calendar/CalendarPage';
 import { MailPage } from '../pages/mail/MailPage';
+import { OaPage } from '../pages/oa/OaPage';
 import { RecentPage } from '../pages/recent/RecentPage';
 import { ProfilePage } from '../pages/settings/ProfilePage';
 import { SecurityPage } from '../pages/settings/SecurityPage';
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           { path: 'calendar', element: <CalendarPage /> },
           { path: 'mail', element: <MailPage /> },
           { path: 'recent', element: <RecentPage /> },
+          { path: 'oa', element: <OaPage /> },
           { path: 'settings', element: <Navigate to="/app/settings/profile" replace /> },
           { path: 'settings/profile', element: <ProfilePage /> },
           { path: 'settings/security', element: <SecurityPage /> },

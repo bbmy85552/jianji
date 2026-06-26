@@ -27,7 +27,7 @@ import { formRouter, publicFormRouter } from './routes/form.js';
 import { sessionRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
 import { UPLOAD_ROOT } from './lib/upload.js';
-import { isSystemInitialized } from './lib/systemSettings.js';
+import { getPublicBrandSettings, isSystemInitialized } from './lib/systemSettings.js';
 import { HttpError } from './lib/asyncHandler.js';
 
 function firstHeader(value: string | string[] | undefined) {
@@ -86,6 +86,15 @@ export function createApp() {
         return next(new HttpError(503, '系统尚未初始化', 'SETUP_REQUIRED'));
       })
       .catch(next);
+  });
+
+  app.get('/api/public/settings', async (_req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(await getPublicBrandSettings());
+    } catch (err) {
+      next(err);
+    }
   });
 
   app.use('/api/auth', authRouter);

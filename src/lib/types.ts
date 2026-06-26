@@ -336,6 +336,9 @@ export interface SystemSettings {
   default_workspace_name: string;
   max_upload_mb: string;
   brand_name: string;
+  company_name: string;
+  oa_url: string;
+  register_invite_code: string;
   [k: string]: string;
 }
 

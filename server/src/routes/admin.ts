@@ -292,6 +292,9 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   default_workspace_name: '我的空间',
   max_upload_mb: '25',
   brand_name: '简记',
+  company_name: '文档中心',
+  oa_url: 'https://2dqy-oa.2dqy.com/calendar',
+  register_invite_code: '',
   latest_version: '',
 };
 
@@ -445,7 +448,14 @@ adminRouter.put(
         actorId: req.user!.id,
         action: 'UPDATE_SETTINGS',
         target: 'system',
-        metaJson: JSON.stringify(Object.fromEntries(entries)),
+        metaJson: JSON.stringify(
+          Object.fromEntries(
+            entries.map(([key, value]) => [
+              key,
+              key === 'register_invite_code' && value ? '[REDACTED]' : value,
+            ]),
+          ),
+        ),
       },
     });
     res.json({ ok: true });
