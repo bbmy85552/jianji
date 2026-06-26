@@ -82,6 +82,15 @@ export async function getPublicBrandSettings() {
   };
 }
 
+export async function getMailBrandName() {
+  const map = await getSystemSettingMap();
+  return (
+    map[SYSTEM_SETTING_KEYS.companyName]?.trim() ||
+    map[SYSTEM_SETTING_KEYS.brandName]?.trim() ||
+    '简记'
+  );
+}
+
 export async function getRuntimeMailConfig(): Promise<RuntimeMailConfig | null> {
   const map = await getSystemSettingMap();
   if (map[SYSTEM_SETTING_KEYS.mailEnabled] !== undefined) {

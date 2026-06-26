@@ -7,6 +7,7 @@ import { asyncHandler, HttpError } from '../lib/asyncHandler.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { hashPassword, generateNumericCode } from '../lib/hash.js';
 import { sendMail } from '../lib/mail.js';
+import { getMailBrandName } from '../lib/systemSettings.js';
 import { createBackupPayload, createMigrationPayload, restoreBackupPayload, restoreMigrationPayload } from '../lib/backup.js';
 import { contentDispositionAttachment } from '../lib/filename.js';
 import { env } from '../env.js';
@@ -26,7 +27,8 @@ adminRouter.post(
         text: z.string().max(4000).optional(),
       })
       .parse(req.body);
-    const subject = body.subject || '[简记] 测试邮件';
+    const brandName = await getMailBrandName();
+    const subject = body.subject || `[${brandName}] 测试邮件`;
     const text =
       body.text ||
       '这是一封测试邮件，用于校验系统 SMTP 配置是否可用。\n\n如果你收到这封邮件，说明配置正确。';
@@ -402,12 +404,13 @@ async function broadcastMaintenanceNotification(input: {
   });
   let emails = 0;
   let emailErrors = 0;
+  const brandName = await getMailBrandName();
   for (const u of users) {
     try {
       await sendMail({
         to: u.email,
-        subject: `[简记] ${input.title}`,
-        text: `${input.body}\n\n此邮件由简记系统维护通知自动发送。`,
+        subject: `[${brandName}] ${input.title}`,
+        text: `${input.body}\n\n此邮件由${brandName}系统维护通知自动发送。`,
       });
       emails += 1;
     } catch (err) {
