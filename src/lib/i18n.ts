@@ -317,6 +317,12 @@ const exactEn: Record<string, string> = {
   网格: 'Grid',
   树形: 'Tree',
   导入文件: 'Import File',
+  复制到公共知识库: 'Copy to Public Docs',
+  文件夹名称: 'Folder Name',
+  文件夹: 'Folder',
+  移动到文件夹: 'Move to Folder',
+  公共知识库根目录: 'Public Docs Root',
+  移动: 'Move',
   我的知识库: 'My Docs',
   我的私人知识库: 'My Private Docs',
   仅自己可见: 'Only visible to you',
@@ -724,13 +730,21 @@ function translateTextNode(node: Text, language: LanguagePreference) {
   const current = node.nodeValue ?? '';
   let source = originalText.get(node);
   const lastTranslated = translatedText.get(node);
+
+  if (language !== 'en') {
+    const next = lastTranslated !== undefined && current === lastTranslated && source !== undefined ? source : current;
+    originalText.set(node, next);
+    translatedText.delete(node);
+    if (node.nodeValue !== next) node.nodeValue = next;
+    return;
+  }
+
   if (source === undefined || (lastTranslated !== undefined && current !== lastTranslated)) {
     source = current;
     originalText.set(node, source);
   }
-  const next = language === 'en' ? translateText(source, 'en') : source;
-  if (language === 'en') translatedText.set(node, next);
-  else translatedText.delete(node);
+  const next = translateText(source, 'en');
+  translatedText.set(node, next);
   if (node.nodeValue !== next) node.nodeValue = next;
 }
 
@@ -750,13 +764,19 @@ function translateAttrs(el: Element, language: LanguagePreference) {
       translatedAttrs.set(el, translatedMap);
     }
     const lastTranslated = translatedMap.get(attr);
+    if (language !== 'en') {
+      const next = lastTranslated !== undefined && current === lastTranslated && map.has(attr) ? map.get(attr)! : current;
+      map.set(attr, next);
+      translatedMap.delete(attr);
+      if (current !== next) el.setAttribute(attr, next);
+      continue;
+    }
     if (!map.has(attr) || (lastTranslated !== undefined && current !== lastTranslated)) {
       map.set(attr, current);
     }
     const source = map.get(attr) ?? current;
-    const next = language === 'en' ? translateText(source, 'en') : source;
-    if (language === 'en') translatedMap.set(attr, next);
-    else translatedMap.delete(attr);
+    const next = translateText(source, 'en');
+    translatedMap.set(attr, next);
     if (current !== next) el.setAttribute(attr, next);
   }
 }

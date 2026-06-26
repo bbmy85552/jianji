@@ -416,7 +416,7 @@ export function EditorToolbar({ editor, fontFamilies, handlers }: ToolbarProps) 
           </ToolButton>
         )}
         {handlers?.onImportFile && (
-          <ToolButton title="导入 docx / md" onClick={handlers.onImportFile}>
+          <ToolButton title="导入文件：支持 Word (.docx)、Markdown (.md/.markdown)、纯文本 (.txt)" onClick={handlers.onImportFile}>
             <Upload size={16} />
           </ToolButton>
         )}
