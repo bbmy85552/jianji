@@ -229,6 +229,11 @@ html[data-theme='dark'] .divide-black\/5 > :not([hidden]) ~ :not([hidden]) {
   margin: 1em 0;
   overflow: hidden;
 }
+.rich-editor .ProseMirror table[data-auto-fit='true'] {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100%;
+}
 .rich-editor .ProseMirror th,
 .rich-editor .ProseMirror td {
   border: 1px solid rgba(0, 0, 0, 0.1);

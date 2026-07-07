@@ -6,10 +6,7 @@ import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
-import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableHeader from '@tiptap/extension-table-header';
-import TableCell from '@tiptap/extension-table-cell';
 import Image from '@tiptap/extension-image';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
@@ -23,6 +20,7 @@ import { FontFamily } from './FontFamily';
 import { LineHeight } from './LineHeight';
 import { FindReplacePanel } from './FindReplacePanel';
 import { EditorToolbar, type EditorToolbarHandlers } from './Toolbar';
+import { DocumentTable, DocumentTableCell, DocumentTableHeader } from './TableExtensions';
 
 interface Props {
   initialContent: string;
@@ -107,10 +105,10 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { target: '_blank' } }),
-      Table.configure({ resizable: true }),
+      DocumentTable.configure({ resizable: true }),
       TableRow,
-      TableHeader,
-      TableCell,
+      DocumentTableHeader,
+      DocumentTableCell,
       Image.configure({ inline: false, allowBase64: false, HTMLAttributes: { class: 'doc-image' } }),
       TaskList.configure({ HTMLAttributes: { class: 'doc-tasklist' } }),
       TaskItem.configure({ nested: true, HTMLAttributes: { class: 'doc-taskitem' } }),
