@@ -81,6 +81,7 @@ export function DocsListPage() {
   const [moveTarget, setMoveTarget] = useState<DocNode | null>(null);
   const [moveFolderId, setMoveFolderId] = useState<string | null>(null);
   const [publicFolderId, setPublicFolderId] = useState<string | null>(null);
+  const [mineFolderId, setMineFolderId] = useState<string | null>(null);
   const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [createKind, setCreateKind] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
@@ -158,7 +159,7 @@ export function DocsListPage() {
         }
       } else {
         const { data } = await api.post<{ doc: DocNode }>('/docs', {
-          workspaceKind: createOpen.mode === 'folder' ? 'PUBLIC' : createKind,
+          workspaceKind: createKind,
           title: createTitle.trim() || '未命名文档',
           parentId: createOpen.parentId ?? null,
           isFolder: createOpen.mode === 'folder',
@@ -166,8 +167,14 @@ export function DocsListPage() {
         setCreateOpen(null);
         if (createOpen.mode === 'folder') {
           await load();
-          setTab('public');
-          setPublicFolderId(data.doc.id);
+          const parentLevel = createOpen.parentId ?? null;
+          if (createKind === 'PRIVATE') {
+            setTab('mine');
+            setMineFolderId(parentLevel);
+          } else {
+            setTab('public');
+            setPublicFolderId(parentLevel);
+          }
           showToast('文件夹已创建', 'success');
         } else {
           navigate(`/app/docs/${data.doc.id}`);
@@ -189,11 +196,6 @@ export function DocsListPage() {
     } catch (err) {
       showToast(asApiError(err).error, 'error');
     }
-  };
-
-  const movePublicDocToFolder = async (doc: DocNode, folderId: string | null) => {
-    if (doc.isFolder || doc.parentId === folderId) return;
-    await moveDoc(doc, folderId);
   };
 
   const openMoveDialog = (doc: DocNode) => {
@@ -286,6 +288,25 @@ export function DocsListPage() {
     return path;
   }, [allPublicDocs, publicFolderId]);
 
+  const allMineDocs = tree?.mine ?? [];
+  const mineFolders = useMemo(
+    () => allMineDocs.filter((d) => d.isFolder).sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN')),
+    [allMineDocs],
+  );
+  const mineFolderPath = useMemo(() => {
+    if (!mineFolderId) return [];
+    const map = new Map(allMineDocs.map((d) => [d.id, d]));
+    const path: DocNode[] = [];
+    const seen = new Set<string>();
+    let cursor = map.get(mineFolderId);
+    while (cursor && !seen.has(cursor.id)) {
+      path.unshift(cursor);
+      seen.add(cursor.id);
+      cursor = cursor.parentId ? map.get(cursor.parentId) : undefined;
+    }
+    return path;
+  }, [allMineDocs, mineFolderId]);
+
   const list = (() => {
     if (!tree) return [];
     const raw =
@@ -301,7 +322,11 @@ export function DocsListPage() {
     return raw.filter((d) => d.title.toLowerCase().includes(kw));
   })();
   const displayList =
-    tab === 'public' && !q ? list.filter((d) => (d.parentId ?? null) === publicFolderId) : list;
+    tab === 'public' && !q
+      ? list.filter((d) => (d.parentId ?? null) === publicFolderId)
+      : tab === 'mine' && !q
+        ? list.filter((d) => (d.parentId ?? null) === mineFolderId)
+        : list;
 
   const treeNodes = useMemo(() => buildTree(list), [list]);
   const treeSupportsManage = tab === 'mine' || tab === 'public';
@@ -337,8 +362,19 @@ export function DocsListPage() {
     setPublicFolderId(folderId);
   };
 
-  const draggableInPublicGrid = (doc: DocNode) =>
-    tab === 'public' && layout === 'grid' && !q && !doc.isFolder && canManage(doc);
+  const openMineFolder = (folderId: string | null) => {
+    setTab('mine');
+    setLayout('grid');
+    setQ('');
+    setMineFolderId(folderId);
+  };
+
+  const draggableInGrid = (doc: DocNode) =>
+    ((tab === 'public' && !!user?.role) || tab === 'mine') &&
+    layout === 'grid' &&
+    !q &&
+    !doc.isFolder &&
+    canManage(doc);
 
   return (
     <div className="py-6 sm:py-8 animate-fade-in-up">
@@ -498,6 +534,43 @@ export function DocsListPage() {
         </div>
       )}
 
+      {tab === 'mine' && !q && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1 text-sm text-text-secondary">
+            <button
+              type="button"
+              onClick={() => openMineFolder(null)}
+              className={`px-2 py-1 rounded-lg hover:bg-black/5 ${mineFolderId === null ? 'text-text-primary font-medium' : ''}`}
+            >
+              我的知识库
+            </button>
+            {mineFolderPath.map((folder) => (
+              <span key={folder.id} className="inline-flex items-center gap-1">
+                <span>/</span>
+                <button
+                  type="button"
+                  onClick={() => openMineFolder(folder.id)}
+                  className={`px-2 py-1 rounded-lg hover:bg-black/5 ${folder.id === mineFolderId ? 'text-text-primary font-medium' : ''}`}
+                >
+                  {folder.title}
+                </button>
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              setCreateKind('PRIVATE');
+              setCreateTitle('新建文件夹');
+              setImportFailures([]);
+              setCreateOpen({ mode: 'folder', parentId: mineFolderId });
+            }}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-white/70 text-sm text-text-secondary hover:bg-white hover:text-text-primary"
+          >
+            <FolderPlus size={15} /> 新建文件夹
+          </button>
+        </div>
+      )}
+
       {displayList.length === 0 ? (
         <div className="glass-card rounded-2xl p-10 text-sm text-text-secondary text-center">
           {q
@@ -541,9 +614,9 @@ export function DocsListPage() {
             <li
               key={doc.id}
               className="relative group"
-              draggable={draggableInPublicGrid(doc)}
+              draggable={draggableInGrid(doc)}
               onDragStart={(e) => {
-                if (!draggableInPublicGrid(doc)) return;
+                if (!draggableInGrid(doc)) return;
                 e.dataTransfer.setData('text/plain', doc.id);
                 e.dataTransfer.effectAllowed = 'move';
                 setDraggingDocId(doc.id);
@@ -571,8 +644,9 @@ export function DocsListPage() {
                 const draggedId = e.dataTransfer.getData('text/plain') || draggingDocId;
                 setDraggingDocId(null);
                 setDragOverFolderId(null);
-                const dragged = allPublicDocs.find((item) => item.id === draggedId);
-                if (dragged) void movePublicDocToFolder(dragged, doc.id);
+                const sourceList = tab === 'mine' ? allMineDocs : allPublicDocs;
+                const dragged = sourceList.find((item) => item.id === draggedId);
+                if (dragged) void moveDoc(dragged, doc.id);
               }}
             >
               {(() => {
@@ -581,13 +655,15 @@ export function DocsListPage() {
                 return (
               <button
                 onClick={() => {
-                  if (doc.isFolder) openPublicFolder(doc.id);
-                  else navigate(`/app/docs/${doc.id}`);
+                  if (doc.isFolder) {
+                    if (tab === 'mine') openMineFolder(doc.id);
+                    else openPublicFolder(doc.id);
+                  } else navigate(`/app/docs/${doc.id}`);
                 }}
                 className={`glass-card rounded-xl p-4 w-full text-left flex items-start gap-3 border transition-all duration-200 ${
                   doc.isFolder
                     ? `${palette?.card ?? ''} ${over ? `scale-[1.06] -translate-y-1 ring-4 ${palette?.glow ?? ''} shadow-xl` : 'hover:shadow-md hover:-translate-y-0.5'}`
-                    : `${draggingDocId === doc.id ? 'opacity-60 scale-[0.98]' : 'hover:shadow-md hover:-translate-y-0.5'} ${draggableInPublicGrid(doc) ? 'cursor-grab active:cursor-grabbing' : ''}`
+                    : `${draggingDocId === doc.id ? 'opacity-60 scale-[0.98]' : 'hover:shadow-md hover:-translate-y-0.5'} ${draggableInGrid(doc) ? 'cursor-grab active:cursor-grabbing' : ''}`
                 }`}
               >
                 <div
@@ -632,7 +708,7 @@ export function DocsListPage() {
                 </button>
                 {canManage(doc) && (
                   <>
-                    {tab === 'public' && !doc.isFolder && (
+                    {(tab === 'public' || tab === 'mine') && !doc.isFolder && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -718,12 +794,25 @@ export function DocsListPage() {
             )}
             {createOpen.mode === 'folder' ? (
               <div className="rounded-xl border border-liquid-indigo/15 bg-liquid-indigo/5 p-3 text-sm text-text-primary">
-                <div className="flex items-center gap-2 font-medium">
-                  <Globe size={14} /> 公共知识库
-                </div>
-                <div className="text-xs text-text-secondary mt-1">
-                  文件夹用于整理公共知识库，所有注册用户可查看其中的文档。
-                </div>
+                {createKind === 'PRIVATE' ? (
+                  <>
+                    <div className="flex items-center gap-2 font-medium">
+                      <Lock size={14} /> 我的私人知识库
+                    </div>
+                    <div className="text-xs text-text-secondary mt-1">
+                      文件夹用于整理私人知识库，仅自己可见。
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 font-medium">
+                      <Globe size={14} /> 公共知识库
+                    </div>
+                    <div className="text-xs text-text-secondary mt-1">
+                      文件夹用于整理公共知识库，所有注册用户可查看其中的文档。
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
             <div>
@@ -837,8 +926,8 @@ export function DocsListPage() {
               onChange={(e) => setMoveFolderId(e.target.value || null)}
               className="w-full px-3 py-2 rounded-lg border border-black/10 bg-white text-sm"
             >
-              <option value="">公共知识库根目录</option>
-              {publicFolders
+              <option value="">{tab === 'mine' ? '我的知识库根目录' : '公共知识库根目录'}</option>
+              {(tab === 'mine' ? mineFolders : publicFolders)
                 .filter((folder) => folder.id !== moveTarget.id)
                 .map((folder) => (
                   <option key={folder.id} value={folder.id}>
