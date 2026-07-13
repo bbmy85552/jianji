@@ -18,6 +18,7 @@ import { OaPage } from '../pages/oa/OaPage';
 import { RecentPage } from '../pages/recent/RecentPage';
 import { ProfilePage } from '../pages/settings/ProfilePage';
 import { SecurityPage } from '../pages/settings/SecurityPage';
+import { CliPage } from '../pages/settings/CliPage';
 import { FontsPage } from '../pages/settings/FontsPage';
 import { PreferencesPage } from '../pages/settings/PreferencesPage';
 import { PublicFormPage } from '../pages/forms/PublicFormPage';
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
           { path: 'settings', element: <Navigate to="/app/settings/profile" replace /> },
           { path: 'settings/profile', element: <ProfilePage /> },
           { path: 'settings/security', element: <SecurityPage /> },
+          { path: 'settings/cli', element: <CliPage /> },
           { path: 'settings/preferences', element: <PreferencesPage /> },
           { path: 'settings/fonts', element: <FontsPage /> },
         ],

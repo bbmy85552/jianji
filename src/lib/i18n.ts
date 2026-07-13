@@ -85,9 +85,44 @@ const exactEn: Record<string, string> = {
   // Settings
   个人资料: 'Profile',
   密码与邮箱: 'Password & Email',
+  'AI 与 CLI': 'AI & CLI',
   偏好设置: 'Preferences',
   字体管理: 'Font Management',
   账号安全相关设置: 'Account security settings',
+  '为 AI 客户端、MCP 和命令行创建访问凭证。':
+    'Create access credentials for AI clients, MCP, and command line tools.',
+  '每个用户只有一个 API Key。重建后旧 Key 会立即失效，明文只显示这一次。':
+    'Each user has one API Key. Regenerating it immediately invalidates the old key, and the plaintext is shown only once.',
+  '当前 Key': 'Current Key',
+  最近使用: 'Last Used',
+  从未使用: 'Never used',
+  '还没有 API Key。': 'No API Key yet.',
+  '新 API Key': 'New API Key',
+  '请立即保存。关闭或刷新页面后将无法再次查看明文。':
+    'Save it now. After closing or refreshing this page, the plaintext cannot be viewed again.',
+  '复制 API Key': 'Copy API Key',
+  '生成 API Key': 'Generate API Key',
+  '重建 API Key': 'Regenerate API Key',
+  '删除 API Key': 'Delete API Key',
+  '重建后旧 API Key 会立即失效，继续吗？':
+    'Regenerating will immediately invalidate the old API Key. Continue?',
+  '确认删除当前 API Key？删除后 CLI 和 AI 工具将无法访问。':
+    'Delete the current API Key? CLI and AI tools will no longer be able to access your account.',
+  '新的 API Key 已生成，请立即保存': 'New API Key generated. Save it now.',
+  'API Key 已删除': 'API Key deleted',
+  '远程 MCP': 'Remote MCP',
+  '支持远程 MCP 的客户端可以直接连接 docs-platform，不需要下载源码。':
+    'Clients that support remote MCP can connect directly to docs-platform without downloading the source code.',
+  'MCP 地址': 'MCP URL',
+  客户端配置示例: 'Client Configuration Example',
+  '测试 tools/list': 'Test tools/list',
+  '本地 CLI': 'Local CLI',
+  'CLI 主要用于开发和排查。AI 客户端优先使用远程 MCP 地址。':
+    'The CLI is mainly for development and troubleshooting. AI clients should prefer the remote MCP URL.',
+  环境变量与命令: 'Environment Variables and Commands',
+  'API Key 会以当前用户身份访问文档和数据表。不要把 API Key 写入公开仓库、截图或共享文档。':
+    'The API Key accesses documents and tables as the current user. Do not put it in public repositories, screenshots, or shared documents.',
+  最近重建: 'Last Regenerated',
   修改密码: 'Change Password',
   当前密码: 'Current Password',
   新密码: 'New Password',
@@ -672,6 +707,8 @@ const textPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
   [/^共 (\d+) 人 · 第 (\d+) \/ (\d+) 页$/, (m) => `${m[1]} users · Page ${m[2]} / ${m[3]}`],
   [/^共 (\d+) 条 · 第 (\d+) \/ (\d+) 页$/, (m) => `${m[1]} logs · Page ${m[2]} / ${m[3]}`],
   [/^(.+) · 创建于 (.+)$/, (m) => `${m[1]} · Created at ${m[2]}`],
+  [/^创建：(.+) · 最近重建：(.+)$/, (m) => `Created: ${m[1]} · Last regenerated: ${m[2]}`],
+  [/^创建：(.+)$/, (m) => `Created: ${m[1]}`],
   [/^当前版本：(.+)·最新版本：(.+)·(.+)$/, (m) => `Current version: ${m[1]} · Latest version: ${m[2]} · ${translateText(m[3])}`],
   [/^(\d+) 分钟前$/, (m) => `${m[1]} minutes ago`],
   [/^(\d+) 小时前$/, (m) => `${m[1]} hours ago`],

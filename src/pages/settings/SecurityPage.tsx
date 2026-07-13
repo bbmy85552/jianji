@@ -6,15 +6,6 @@ import { SettingsLayout, Field } from './SettingsLayout';
 import { SessionsPanel } from './SessionsPanel';
 import type { CurrentUser } from '../../lib/types';
 
-interface CliApiKeyInfo {
-  id: string;
-  prefix: string;
-  masked: string;
-  createdAt: string;
-  regeneratedAt?: string | null;
-  lastUsedAt?: string | null;
-}
-
 export function SecurityPage() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -31,10 +22,6 @@ export function SecurityPage() {
   const [emailSaving, setEmailSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
-  const [cliKey, setCliKey] = useState<CliApiKeyInfo | null>(null);
-  const [newCliKey, setNewCliKey] = useState('');
-  const [cliKeyLoading, setCliKeyLoading] = useState(true);
-  const [cliKeySaving, setCliKeySaving] = useState(false);
   const timerRef = useRef<number | null>(null);
   useEffect(
     () => () => {
@@ -67,23 +54,6 @@ export function SecurityPage() {
   };
 
   const purpose: 'bind_email' | 'change_email' = user?.emailVerifiedAt ? 'change_email' : 'bind_email';
-
-  useEffect(() => {
-    let alive = true;
-    setCliKeyLoading(true);
-    api
-      .get<{ apiKey: CliApiKeyInfo | null }>('/me/cli-key')
-      .then(({ data }) => {
-        if (alive) setCliKey(data.apiKey);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (alive) setCliKeyLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   const sendCode = async () => {
     if (!email) return showToast('请输入邮箱', 'error');
@@ -121,38 +91,6 @@ export function SecurityPage() {
       showToast(asApiError(err).error, 'error');
     } finally {
       setEmailSaving(false);
-    }
-  };
-
-  const regenerateCliKey = async () => {
-    if (cliKey && !window.confirm('重建后旧 API Key 会立即失效，继续吗？')) return;
-    setCliKeySaving(true);
-    try {
-      const { data } = await api.post<{ apiKey: CliApiKeyInfo & { key: string } }>(
-        '/me/cli-key/regenerate',
-      );
-      setCliKey(data.apiKey);
-      setNewCliKey(data.apiKey.key);
-      showToast('新的 API Key 已生成，请立即保存', 'success');
-    } catch (err) {
-      showToast(asApiError(err).error, 'error');
-    } finally {
-      setCliKeySaving(false);
-    }
-  };
-
-  const revokeCliKey = async () => {
-    if (!window.confirm('确认删除当前 API Key？删除后 CLI 和 AI 工具将无法访问。')) return;
-    setCliKeySaving(true);
-    try {
-      await api.delete('/me/cli-key');
-      setCliKey(null);
-      setNewCliKey('');
-      showToast('API Key 已删除', 'success');
-    } catch (err) {
-      showToast(asApiError(err).error, 'error');
-    } finally {
-      setCliKeySaving(false);
     }
   };
 
@@ -239,63 +177,6 @@ export function SecurityPage() {
       </form>
 
       <SessionsPanel />
-
-      <section className="mt-10 border-t border-black/10 pt-8">
-        <div className="text-sm font-semibold text-text-primary mb-2">AI / CLI API Key</div>
-        <p className="text-xs text-text-secondary mb-4">
-          用于让 AI 工具或命令行管理你的文档和数据表。每个用户只有一个 Key，重建后旧 Key 会失效。
-        </p>
-        <div className="rounded-xl border border-black/10 bg-white/70 p-4 mb-4">
-          {cliKeyLoading ? (
-            <div className="text-sm text-text-secondary">加载中…</div>
-          ) : cliKey ? (
-            <div className="space-y-1 text-sm">
-              <div>
-                当前 Key：<span className="font-mono text-text-primary">{cliKey.masked}</span>
-              </div>
-              <div className="text-xs text-text-secondary">
-                创建：{new Date(cliKey.createdAt).toLocaleString()}
-                {cliKey.lastUsedAt ? ` · 最近使用：${new Date(cliKey.lastUsedAt).toLocaleString()}` : ''}
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-text-secondary">还没有 API Key。</div>
-          )}
-        </div>
-
-        {newCliKey && (
-          <Field label="新 API Key" hint="明文只显示这一次。建议放入 DOCS_PLATFORM_API_KEY 环境变量。">
-            <textarea
-              readOnly
-              value={newCliKey}
-              rows={2}
-              className="w-full px-3 py-2 rounded-xl border border-liquid-indigo/30 bg-white font-mono text-xs outline-none"
-              onFocus={(e) => e.currentTarget.select()}
-            />
-          </Field>
-        )}
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={cliKeySaving}
-            onClick={regenerateCliKey}
-            className="px-4 py-2 rounded-xl bg-liquid-indigo text-white text-sm font-medium hover:bg-primary transition-colors disabled:opacity-60"
-          >
-            {cliKey ? '重建 API Key' : '生成 API Key'}
-          </button>
-          {cliKey && (
-            <button
-              type="button"
-              disabled={cliKeySaving}
-              onClick={revokeCliKey}
-              className="px-4 py-2 rounded-xl border border-red-200 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-60"
-            >
-              删除 API Key
-            </button>
-          )}
-        </div>
-      </section>
     </SettingsLayout>
   );
 }
