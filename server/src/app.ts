@@ -26,6 +26,9 @@ import { recentRouter } from './routes/recent.js';
 import { formRouter, publicFormRouter } from './routes/form.js';
 import { sessionRouter } from './routes/sessions.js';
 import { setupRouter } from './routes/setup.js';
+import { cliRouter } from './routes/cli.js';
+import { cliKeyRouter } from './routes/cliKey.js';
+import { mcpRouter } from './routes/mcp.js';
 import { UPLOAD_ROOT } from './lib/upload.js';
 import { getPublicBrandSettings, isSystemInitialized } from './lib/systemSettings.js';
 import { HttpError } from './lib/asyncHandler.js';
@@ -76,6 +79,8 @@ export function createApp() {
     res.json({ ok: true, name: 'Document Center API' });
   });
 
+  app.use('/mcp', mcpRouter);
+
   fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
 
   app.use('/api/setup', setupRouter);
@@ -98,7 +103,9 @@ export function createApp() {
   });
 
   app.use('/api/auth', authRouter);
+  app.use('/api/cli', cliRouter);
   app.use('/api/me', meRouter);
+  app.use('/api/me/cli-key', cliKeyRouter);
   app.use('/api/users', usersRouter);
   app.use('/api/workspaces', workspaceRouter);
   app.use('/api/docs', docRouter);
