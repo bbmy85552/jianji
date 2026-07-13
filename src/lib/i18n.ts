@@ -623,6 +623,30 @@ const exactEn: Record<string, string> = {
   '保存中…': 'Saving...',
   保存修改: 'Save Changes',
   历史头像: 'Avatar History',
+  回收站: 'Trash',
+  '公共知识库中被删除的文档，保留 30 天后自动清理':
+    'Deleted documents from the public workspace are retained for 30 days before automatic cleanup.',
+  删除人: 'Deleted By',
+  删除时间: 'Deleted At',
+  剩余保留: 'Retained For',
+  恢复: 'Restore',
+  彻底删除: 'Purge',
+  回收站为空: 'Trash is empty',
+  '恢复到原位置': 'restore to its original location',
+  '彻底删除（不可恢复）': 'Permanently delete (irreversible)',
+  '已彻底删除': 'Permanently deleted',
+  '已恢复到原位置': 'Restored to its original location',
+  '确认恢复文档': 'Restore document',
+  '将还原到其原位置。': 'It will be restored to its original location.',
+  '确认彻底删除': 'Confirm permanent deletion',
+  恢复文档: 'Restore document',
+  '彻底删除文档': 'Purge document',
+  '移动到公共知识库': 'Move to Public Workspace',
+  '已移动到公共知识库': 'Moved to public workspace',
+  '已复制到公共知识库': 'Copied to public workspace',
+  '移到我的私密空间': 'Move to My Private Space',
+  '转为私密': 'Make Private',
+  '已移到我的私密空间': 'Moved to my private space',
 };
 
 const textPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
@@ -679,6 +703,16 @@ const textPatterns: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
   [/^选择(.+)$/, (m) => `Choose ${translateText(m[1])}`],
   [/^删除(.+)$/, (m) => `Delete ${translateText(m[1])}`],
   [/^(.+) 暂无待办$/, (m) => `No todos for ${m[1]}`],
+  [/^创建者：(.+)$/, (m) => `Creator: ${m[1]}`],
+  [/^上传者：(.+)$/, (m) => `Uploader: ${m[1]}`],
+  [/^确认将「(.+)」移动到公共知识库？移动后将从私人知识库移除，所有注册用户可查看。$/, (m) => `Move "${m[1]}" to the public workspace? It will be removed from your private workspace and visible to all registered users.`],
+  [/^已移动 (\d+) 个文档到公共知识库$/, (m) => `Moved ${m[1]} documents to the public workspace`],
+  [/^确认将「(.+)」复制到公共知识库？复制后所有注册用户都可以查看。$/, (m) => `Copy "${m[1]}" to the public workspace? All registered users will be able to view it.`],
+  [/^已复制 (\d+) 个文档到公共知识库$/, (m) => `Copied ${m[1]} documents to the public workspace`],
+  [/^确认将「(.+)」移到你的私密空间？移动后将从公共知识库移除，仅你的管理员账号可访问。$/, (m) => `Move "${m[1]}" to your private space? It will be removed from the public workspace and only your admin account will have access.`],
+  [/^已将 (\d+) 个文档移到私密空间$/, (m) => `Moved ${m[1]} documents to your private space`],
+  [/^确认恢复文档「(.+)」？将还原到其原位置。$/, (m) => `Restore document "${m[1]}"? It will be restored to its original location.`],
+  [/^确认彻底删除文档「(.+)」？此操作不可恢复，文档及其版本、评论、附件将永久消失。$/, (m) => `Permanently delete document "${m[1]}"? This cannot be undone. The document and its versions, comments, and attachments will be permanently lost.`],
 ];
 
 const attrNames = ['placeholder', 'title', 'aria-label', 'alt'] as const;

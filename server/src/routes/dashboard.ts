@@ -38,6 +38,7 @@ dashboardRouter.get(
         prisma.document.findMany({
           where: {
             isArchived: false,
+            deletedAt: null,
             OR: [
               { createdById: userId },
               { permissions: { some: { userId } } },
@@ -54,7 +55,7 @@ dashboardRouter.get(
         }),
         prisma.notification.count({ where: { userId, readAt: null } }),
         prisma.documentFavorite.findMany({
-          where: { userId },
+          where: { userId, document: { isArchived: false, deletedAt: null } },
           orderBy: { createdAt: 'desc' },
           take: 5,
           include: {

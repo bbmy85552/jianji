@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AuthLayout, Input, PrimaryButton } from './AuthLayout';
 import { api, asApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
@@ -23,7 +23,7 @@ export function LoginPage() {
   const [googleInviteCode, setGoogleInviteCode] = useState('');
   const [brandName, setBrandName] = useState(DEFAULT_PUBLIC_SETTINGS.brandName);
   const setUser = useAuthStore((s) => s.setUser);
-  const navigate = useNavigate();
+  // setUser 后由外层 RequireGuest 统一跳转到来源页，LoginPage 不自行 navigate
 
   useEffect(() => {
     let alive = true;
@@ -52,7 +52,8 @@ export function LoginPage() {
         clearRememberedLogin();
       }
       setUser(data.user);
-      navigate('/app/dashboard', { replace: true });
+      // 不在此处 navigate：setUser 会触发外层 RequireGuest 检测到已登录，
+      // 由它统一负责跳转到来源页（next/state.from），避免与声明式 Navigate 竞争。
     } catch (err) {
       setError(asApiError(err).error);
     } finally {
@@ -68,7 +69,7 @@ export function LoginPage() {
     try {
       const { data } = await api.post<{ user: CurrentUser }>('/auth/google', { credential });
       setUser(data.user);
-      navigate('/app/dashboard', { replace: true });
+      // 由 RequireGuest 统一跳转
     } catch (err) {
       const apiError = asApiError(err);
       if (apiError.code === 'INVALID_INVITE_CODE') {
@@ -98,7 +99,7 @@ export function LoginPage() {
         inviteCode,
       });
       setUser(data.user);
-      navigate('/app/dashboard', { replace: true });
+      // 由 RequireGuest 统一跳转
     } catch (err) {
       const apiError = asApiError(err);
       if (apiError.code === 'INVALID_INVITE_CODE') {

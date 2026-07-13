@@ -673,3 +673,121 @@ adminRouter.get(
     res.json({ list, total, page: q.page, pageSize: q.pageSize });
   }),
 );
+
+// ----- 回收站：公共知识库文档软删除恢复与彻底清理 -----
+
+const TRASH_RETAIN_DAYS = 30;
+
+adminRouter.get(
+  '/trash',
+  asyncHandler(async (req, res) => {
+    const q = z
+      .object({
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(100).default(20),
+      })
+      .parse(req.query);
+    // 惰性清理：超过保留期的软删除文档彻底删除
+    const expireBefore = new Date(Date.now() - TRASH_RETAIN_DAYS * 24 * 60 * 60 * 1000);
+    await prisma.document.deleteMany({ where: { deletedAt: { lt: expireBefore } } });
+
+    const [total, list] = await Promise.all([
+      prisma.document.count({ where: { deletedAt: { not: null } } }),
+      prisma.document.findMany({
+        where: { deletedAt: { not: null } },
+        orderBy: { deletedAt: 'desc' },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+        select: {
+          id: true,
+          title: true,
+          workspaceId: true,
+          parentId: true,
+          deletedAt: true,
+          workspace: { select: { id: true, name: true, kind: true } },
+          deletedBy: { select: { id: true, email: true, name: true } },
+          createdBy: { select: { id: true, email: true, name: true } },
+        },
+      }),
+    ]);
+    const items = list.map((d) => ({
+      ...d,
+      remainDays: d.deletedAt
+        ? Math.max(
+            0,
+            Math.ceil(
+              (d.deletedAt.getTime() + TRASH_RETAIN_DAYS * 24 * 60 * 60 * 1000 - Date.now()) /
+                (24 * 60 * 60 * 1000),
+            ),
+          )
+        : 0,
+    }));
+    res.json({ list: items, total, page: q.page, pageSize: q.pageSize });
+  }),
+);
+
+adminRouter.post(
+  '/trash/:id/restore',
+  asyncHandler(async (req, res) => {
+    const doc = await prisma.document.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, title: true, parentId: true, deletedAt: true },
+    });
+    if (!doc || !doc.deletedAt) throw new HttpError(404, '回收站中无此文档', 'NOT_FOUND');
+
+    // 恢复整条父链：若父文件夹也被软删，一并恢复，避免恢复后变成孤儿
+    let cursor = doc.parentId;
+    const parentChain: string[] = [];
+    const visited = new Set<string>();
+    while (cursor && !visited.has(cursor)) {
+      visited.add(cursor);
+      const parent = await prisma.document.findUnique({
+        where: { id: cursor },
+        select: { id: true, parentId: true, deletedAt: true },
+      });
+      if (!parent) break;
+      if (parent.deletedAt) parentChain.push(parent.id);
+      cursor = parent.parentId;
+    }
+    if (parentChain.length) {
+      await prisma.document.updateMany({
+        where: { id: { in: parentChain } },
+        data: { deletedAt: null, deletedById: null },
+      });
+    }
+    const restored = await prisma.document.update({
+      where: { id: doc.id },
+      data: { deletedAt: null, deletedById: null },
+    });
+    await prisma.auditLog.create({
+      data: {
+        actorId: req.user!.id,
+        action: 'RESTORE_DOC',
+        target: doc.id,
+        metaJson: JSON.stringify({ title: doc.title }),
+      },
+    });
+    res.json({ doc: restored, restoredParents: parentChain.length });
+  }),
+);
+
+adminRouter.delete(
+  '/trash/:id',
+  asyncHandler(async (req, res) => {
+    const doc = await prisma.document.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, title: true, deletedAt: true },
+    });
+    if (!doc || !doc.deletedAt) throw new HttpError(404, '回收站中无此文档', 'NOT_FOUND');
+    await prisma.document.delete({ where: { id: doc.id } });
+    await prisma.auditLog.create({
+      data: {
+        actorId: req.user!.id,
+        action: 'PURGE_DOC',
+        target: doc.id,
+        metaJson: JSON.stringify({ title: doc.title }),
+      },
+    });
+    res.json({ ok: true });
+  }),
+);

@@ -80,7 +80,7 @@ export function SharePage() {
           <div className="text-base font-semibold text-text-primary mb-2">无法打开分享内容</div>
           <p className="text-sm text-text-secondary mb-4">{errorMsg}</p>
           <Link
-            to="/login"
+            to={`/login?next=${encodeURIComponent(`/share/${token}`)}`}
             className="inline-flex items-center gap-1 text-sm text-liquid-indigo hover:underline"
           >
             <LogIn size={14} /> 返回登录页

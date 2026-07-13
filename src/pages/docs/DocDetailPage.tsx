@@ -11,6 +11,7 @@ import {
   Star,
   MessageSquare,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { api, asApiError, downloadFromApi, uploadFile } from '../../lib/api';
 import { useUiStore } from '../../store/ui';
@@ -21,6 +22,7 @@ import { ShareDialog } from '../../components/ShareDialog';
 import { VersionDrawer } from '../../components/VersionDrawer';
 import { PresenceIndicator } from '../../components/PresenceIndicator';
 import { DocumentToc } from '../../components/docs/DocumentToc';
+import { ConflictResolver, type DocConflict } from '../../components/docs/ConflictResolver';
 import { displayFilename } from '../../lib/filename';
 import type { EditorHeading } from '../../editor/Editor';
 
@@ -68,7 +70,9 @@ export function DocDetailPage() {
   const [title, setTitle] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty'>('saved');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'dirty' | 'conflict'>('saved');
+  const [conflict, setConflict] = useState<DocConflict | null>(null);
+  const [conflictOpen, setConflictOpen] = useState(false);
   const [fonts, setFonts] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [comments, setComments] = useState<DocumentComment[]>([]);
@@ -86,34 +90,65 @@ export function DocDetailPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const saveTimerRef = useRef<number | null>(null);
   const draftRef = useRef<{ title?: string; contentJson?: string }>({});
+  const updatedAtRef = useRef<string | null>(null);
   const uploadBusyRef = useRef(false);
 
   const canWrite = access.canWrite;
   const canDelete = access.canDelete;
   const canInvite = access.canInvite;
 
-  const flushSave = useCallback(async () => {
-    if (!id) return;
-    if (!draftRef.current.title && !draftRef.current.contentJson) return;
-    setSaveStatus('saving');
-    try {
-      await api.patch(`/docs/${id}`, { ...draftRef.current });
-      draftRef.current = {};
-      setSaveStatus('saved');
-    } catch (err) {
-      setSaveStatus('dirty');
-      showToast(asApiError(err).error, 'error');
-    }
-  }, [id, showToast]);
+  const flushSave = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!id) return;
+      if (!opts?.force && !draftRef.current.title && !draftRef.current.contentJson) return;
+      setSaveStatus(opts?.force ? 'saving' : 'saving');
+      try {
+        const payload = {
+          ...(opts?.force
+            ? { title, contentJson: editorRef.current?.editor?.getHTML() ?? '' }
+            : draftRef.current),
+          ...(opts?.force ? { force: true } : { expectedUpdatedAt: updatedAtRef.current ?? undefined }),
+        };
+        const { data } = await api.patch<{ doc: DocDetail }>(`/docs/${id}`, payload);
+        draftRef.current = {};
+        updatedAtRef.current = data.doc.updatedAt;
+        setDoc(data.doc);
+        setSaveStatus('saved');
+      } catch (err) {
+        const apiErr = asApiError(err);
+        if (apiErr.code === 'DOC_CONFLICT') {
+          const remoteDoc = (apiErr.details as { doc: DocDetail } | undefined)?.doc;
+          if (remoteDoc) {
+            setConflict({
+              mine: {
+                title,
+                contentJson: editorRef.current?.editor?.getHTML() ?? draftRef.current.contentJson ?? '',
+              },
+              remote: { title: remoteDoc.title, contentJson: remoteDoc.contentJson },
+            });
+            setConflictOpen(true);
+            updatedAtRef.current = remoteDoc.updatedAt;
+          }
+          setSaveStatus('conflict');
+          return;
+        }
+        setSaveStatus('dirty');
+        showToast(apiErr.error, 'error');
+      }
+    },
+    [id, showToast, title],
+  );
 
   const scheduleSave = useCallback(() => {
     if (!canWrite) return;
+    // 冲突未解决期间暂停自动保存，避免继续打字触发新保存覆盖冲突状态
+    if (conflict) return;
     setSaveStatus('dirty');
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(() => {
       void flushSave();
     }, 1000);
-  }, [flushSave, canWrite]);
+  }, [flushSave, canWrite, conflict]);
 
   useEffect(() => {
     return () => {
@@ -154,9 +189,24 @@ export function DocDetailPage() {
           api.get<{ list: UserFont[] }>('/fonts'),
           api.get<{ favorites: { id: string }[] }>('/docs/tree'),
         ]);
+        if (docRes.data.doc.isFolder) {
+          const nextTab = docRes.data.access.isPublic
+            ? 'public'
+            : docRes.data.doc.workspace?.ownerId === me?.id
+              ? 'mine'
+              : 'shared';
+          navigate(
+            nextTab === 'shared' ? '/app/docs?tab=shared' : `/app/docs?tab=${nextTab}&folder=${docRes.data.doc.id}`,
+            { replace: true },
+          );
+          return;
+        }
         setDoc(docRes.data.doc);
         setAccess(docRes.data.access);
         setTitle(docRes.data.doc.title);
+        updatedAtRef.current = docRes.data.doc.updatedAt;
+        setConflict(null);
+        setConflictOpen(false);
         setIsFavorite(!!treeRes.data.favorites.find((f) => f.id === id));
         const families = [
           ...fontsRes.data.list.map((f) => f.family),
@@ -170,7 +220,7 @@ export function DocDetailPage() {
         navigate('/app/docs');
       }
     })();
-  }, [id, navigate, showToast, loadAttachments, loadComments]);
+  }, [id, me?.id, navigate, showToast, loadAttachments, loadComments]);
 
   const handleTitle = (v: string) => {
     if (!canWrite) return;
@@ -418,10 +468,36 @@ export function DocDetailPage() {
       const { data } = await api.get<{ doc: DocDetail }>(`/docs/${id}`);
       setDoc(data.doc);
       setTitle(data.doc.title);
+      updatedAtRef.current = data.doc.updatedAt;
       editorRef.current?.setContent(data.doc.contentJson);
     } catch (err) {
       showToast(asApiError(err).error, 'error');
     }
+  };
+
+  // 冲突处理：用我的本地修改强制覆盖服务端
+  const handleOverwriteMine = async () => {
+    setConflictOpen(false);
+    await flushSave({ force: true });
+    setConflict(null);
+  };
+
+  // 冲突处理：丢弃本地修改，加载服务端最新版本
+  const handleLoadRemote = async () => {
+    if (!conflict) return;
+    editorRef.current?.setContent(conflict.remote.contentJson);
+    setTitle(conflict.remote.title);
+    draftRef.current = {};
+    setDoc((d) => (d ? { ...d, title: conflict.remote.title, contentJson: conflict.remote.contentJson } : d));
+    setConflict(null);
+    setConflictOpen(false);
+    setSaveStatus('saved');
+    showToast('已加载最新版本', 'success');
+  };
+
+  const handleCloseConflict = () => {
+    setConflictOpen(false);
+    // 保持 saveStatus='conflict' 与徽章，用户可通过徽章重新打开
   };
 
   const initial = useMemo(() => doc?.contentJson ?? '', [doc?.id]);
@@ -452,17 +528,26 @@ export function DocDetailPage() {
           >
             {role === 'OWNER' ? '所有者' : role === 'EDITOR' ? '可编辑' : '仅查看'}
           </span>
-          <span
-            className={`text-xs ${
-              saveStatus === 'saved'
-                ? 'text-emerald-600'
-                : saveStatus === 'saving'
-                  ? 'text-text-secondary'
-                  : 'text-amber-600'
-            }`}
-          >
-            {!canWrite ? '只读' : saveStatus === 'saved' ? '已保存' : saveStatus === 'saving' ? '正在保存…' : '待保存'}
-          </span>
+          {saveStatus === 'conflict' ? (
+            <button
+              onClick={() => setConflictOpen(true)}
+              className="text-xs inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+            >
+              <AlertTriangle size={12} /> 文档已被他人修改，点击查看
+            </button>
+          ) : (
+            <span
+              className={`text-xs ${
+                saveStatus === 'saved'
+                  ? 'text-emerald-600'
+                  : saveStatus === 'saving'
+                    ? 'text-text-secondary'
+                    : 'text-amber-600'
+              }`}
+            >
+              {!canWrite ? '只读' : saveStatus === 'saved' ? '已保存' : saveStatus === 'saving' ? '正在保存…' : '待保存'}
+            </span>
+          )}
           {uploadBusy && (
             <span className="text-xs px-2 py-1 rounded-full bg-liquid-indigo/10 text-liquid-indigo">
               {uploadBusy === 'image' ? '图片上传中…' : uploadBusy === 'attachment' ? '附件上传中…' : '导入中…'}
@@ -690,6 +775,12 @@ export function DocDetailPage() {
             docId={doc.id}
             canWrite={canWrite}
             onRestored={onRestored}
+          />
+          <ConflictResolver
+            conflict={conflict}
+            onOverwriteMine={handleOverwriteMine}
+            onLoadRemote={handleLoadRemote}
+            onClose={handleCloseConflict}
           />
           {commentsOpen && (
             <div className="no-print fixed inset-y-0 right-0 z-40 w-full max-w-md bg-white shadow-2xl border-l border-black/10 flex flex-col">

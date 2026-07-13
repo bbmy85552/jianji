@@ -25,6 +25,7 @@ import { AdminUsersPage } from '../pages/admin/AdminUsersPage';
 import { AdminAuditPage } from '../pages/admin/AdminAuditPage';
 import { AdminGroupsPage } from '../pages/admin/AdminGroupsPage';
 import { AdminSettingsPage } from '../pages/admin/AdminSettingsPage';
+import { AdminTrashPage } from '../pages/admin/AdminTrashPage';
 import { SharePage } from '../pages/share/SharePage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 
@@ -82,6 +83,7 @@ export const router = createBrowserRouter([
           { path: 'users', element: <AdminUsersPage /> },
           { path: 'groups', element: <AdminGroupsPage /> },
           { path: 'settings', element: <AdminSettingsPage /> },
+          { path: 'trash', element: <AdminTrashPage /> },
           { path: 'audit', element: <AdminAuditPage /> },
         ],
       },

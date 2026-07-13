@@ -164,6 +164,69 @@ describe('文档 CRUD 与权限', () => {
     expect(tree.body.counts.public).toBeGreaterThanOrEqual(1);
   });
 
+  it('私人文件夹不能复制到公共知识库，但可以整体移动过去', async () => {
+    const app = await getApp();
+    const { cookie } = await registerUser('move-folder-public@test.local', 'MoveFolderPublic');
+    const wsList = await request(app).get('/api/workspaces').set('Cookie', cookie);
+    const privateWs = wsList.body.list[0];
+
+    const folder = await request(app)
+      .post('/api/docs')
+      .set('Cookie', cookie)
+      .send({ workspaceId: privateWs.id, title: '私人文件夹', isFolder: true });
+    expect(folder.status).toBe(200);
+
+    const child = await request(app)
+      .post('/api/docs')
+      .set('Cookie', cookie)
+      .send({ workspaceId: privateWs.id, title: '子文档', parentId: folder.body.doc.id });
+    expect(child.status).toBe(200);
+
+    const copied = await request(app)
+      .post(`/api/docs/${folder.body.doc.id}/copy-to-public`)
+      .set('Cookie', cookie);
+    expect(copied.status).toBe(400);
+
+    const moved = await request(app)
+      .post(`/api/docs/${folder.body.doc.id}/move-to-public`)
+      .set('Cookie', cookie);
+    expect(moved.status).toBe(200);
+    expect(moved.body.movedCount).toBe(2);
+    expect(moved.body.doc.parentId).toBeNull();
+
+    const tree = await request(app).get('/api/docs/tree').set('Cookie', cookie);
+    const publicFolder = tree.body.public.find((item: { id: string }) => item.id === folder.body.doc.id);
+    const publicChild = tree.body.public.find((item: { id: string }) => item.id === child.body.doc.id);
+    expect(publicFolder?.isFolder).toBe(true);
+    expect(publicFolder?.workspaceId).not.toBe(privateWs.id);
+    expect(publicChild?.parentId).toBe(folder.body.doc.id);
+    expect(tree.body.mine.find((item: { id: string }) => item.id === folder.body.doc.id)).toBeFalsy();
+  });
+
+  it('文件夹可以移动到另一个文件夹下', async () => {
+    const app = await getApp();
+    const { cookie } = await registerUser('move-folder-under-folder@test.local', 'MoveFolderNested');
+    const wsList = await request(app).get('/api/workspaces').set('Cookie', cookie);
+    const privateWs = wsList.body.list[0];
+
+    const parent = await request(app)
+      .post('/api/docs')
+      .set('Cookie', cookie)
+      .send({ workspaceId: privateWs.id, title: '父文件夹', isFolder: true });
+    const childFolder = await request(app)
+      .post('/api/docs')
+      .set('Cookie', cookie)
+      .send({ workspaceId: privateWs.id, title: '待移动文件夹', isFolder: true });
+
+    const moved = await request(app)
+      .patch(`/api/docs/${childFolder.body.doc.id}`)
+      .set('Cookie', cookie)
+      .send({ parentId: parent.body.doc.id });
+
+    expect(moved.status).toBe(200);
+    expect(moved.body.doc.parentId).toBe(parent.body.doc.id);
+  });
+
   it('公共知识库支持文件夹和文档层级', async () => {
     const app = await getApp();
     const { cookie } = await registerUser('public-folder@test.local', 'PublicFolder');

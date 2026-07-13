@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AuthLayout, Input, PrimaryButton } from './AuthLayout';
 import { api, asApiError } from '../../lib/api';
 import { useAuthStore } from '../../store/auth';
@@ -20,7 +20,7 @@ export function RegisterPage() {
   const [sending, setSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const setUser = useAuthStore((s) => s.setUser);
-  const navigate = useNavigate();
+  // setUser 后由外层 RequireGuest 统一跳转到来源页，RegisterPage 不自行 navigate
 
   const timerRef = useRef<number | null>(null);
   useEffect(
@@ -127,7 +127,7 @@ export function RegisterPage() {
         inviteCode,
       });
       setUser(data.user);
-      navigate('/app/dashboard', { replace: true });
+      // 由 RequireGuest 统一跳转
     } catch (err) {
       setError(asApiError(err).error);
     } finally {
@@ -146,7 +146,7 @@ export function RegisterPage() {
         inviteCode,
       });
       setUser(data.user);
-      navigate('/app/dashboard', { replace: true });
+      // 由 RequireGuest 统一跳转
     } catch (err) {
       setError(asApiError(err).error);
     } finally {

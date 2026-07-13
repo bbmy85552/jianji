@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronRight, ChevronDown, Copy, FileText, Folder, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, Copy, FileText, Folder, Plus, Pencil, Trash2, FolderInput, FolderOutput } from 'lucide-react';
 import type { DocNode } from '../../lib/types';
 
 export interface TreeNode extends DocNode {
@@ -54,6 +54,8 @@ interface Props {
   onDelete?: (doc: DocNode) => void;
   onMove?: (doc: DocNode, newParentId: string | null) => void;
   onCopyToPublic?: (doc: DocNode) => void;
+  onMoveToPublic?: (doc: DocNode) => void;
+  onMoveToPrivate?: (doc: DocNode) => void;
 }
 
 export function DocTree({
@@ -66,6 +68,8 @@ export function DocTree({
   onDelete,
   onMove,
   onCopyToPublic,
+  onMoveToPublic,
+  onMoveToPrivate,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [dragOverId, setDragOverId] = useState<string | 'ROOT' | null>(null);
@@ -202,7 +206,7 @@ export function DocTree({
                   <Pencil size={12} />
                 </button>
               )}
-              {onCopyToPublic && (
+              {onCopyToPublic && !node.isFolder && (
                 <button
                   type="button"
                   title="复制到公共知识库"
@@ -213,6 +217,32 @@ export function DocTree({
                   className="p-1 text-text-secondary hover:text-liquid-indigo rounded"
                 >
                   <Copy size={12} />
+                </button>
+              )}
+              {onMoveToPublic && (
+                <button
+                  type="button"
+                  title="移动到公共知识库"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveToPublic(node);
+                  }}
+                  className="p-1 text-text-secondary hover:text-liquid-indigo rounded"
+                >
+                  <FolderInput size={12} />
+                </button>
+              )}
+              {onMoveToPrivate && (
+                <button
+                  type="button"
+                  title="移到我的私密空间"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveToPrivate(node);
+                  }}
+                  className="p-1 text-text-secondary hover:text-liquid-indigo rounded"
+                >
+                  <FolderOutput size={12} />
                 </button>
               )}
               {onDelete && (

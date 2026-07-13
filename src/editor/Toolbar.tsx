@@ -283,7 +283,7 @@ export function EditorToolbar({ editor, fontFamilies, handlers }: ToolbarProps) 
             <span className="w-4 h-4 rounded border" style={{ background: editor.getAttributes('textStyle').color ?? '#1b1b1d' }} />
           </ToolButton>
           {showColor && (
-            <div className="absolute top-9 left-0 z-20 p-2 bg-white border border-black/10 rounded-lg shadow-lg flex gap-1.5 flex-wrap w-40">
+            <div className="absolute top-9 left-0 z-20 p-2 bg-surface-container-lowest border border-black/10 rounded-lg shadow-lg flex gap-1.5 flex-wrap w-40">
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c}
@@ -315,7 +315,7 @@ export function EditorToolbar({ editor, fontFamilies, handlers }: ToolbarProps) 
             <Highlighter size={16} />
           </ToolButton>
           {showHL && (
-            <div className="absolute top-9 left-0 z-20 p-2 bg-white border border-black/10 rounded-lg shadow-lg flex gap-1.5 flex-wrap w-44">
+            <div className="absolute top-9 left-0 z-20 p-2 bg-surface-container-lowest border border-black/10 rounded-lg shadow-lg flex gap-1.5 flex-wrap w-44">
               {HIGHLIGHTS.map((c) => (
                 <button
                   key={c}

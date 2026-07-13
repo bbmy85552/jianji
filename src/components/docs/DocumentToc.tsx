@@ -43,7 +43,7 @@ export function DocumentToc({ headings }: Props) {
 
   return (
     <aside className="no-print hidden xl:block">
-      <div className="sticky top-4 rounded-2xl border border-black/5 bg-white/75 p-4 shadow-sm backdrop-blur">
+      <div className="sticky top-4 rounded-2xl border border-black/5 bg-surface-container-lowest/80 p-4 shadow-sm backdrop-blur">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
           <ListTree size={16} className="text-liquid-indigo" />
           目录

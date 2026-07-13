@@ -59,7 +59,7 @@ shareRouter.get(
 
     if (link.resourceType === 'doc') {
       const doc = await prisma.document.findUnique({
-        where: { id: link.resourceId },
+        where: { id: link.resourceId, deletedAt: null },
         select: {
           id: true,
           title: true,

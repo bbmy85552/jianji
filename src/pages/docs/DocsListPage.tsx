@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Copy,
@@ -17,6 +17,8 @@ import {
   LayoutGrid,
   ListTree,
   Loader2,
+  FolderInput,
+  FolderOutput,
 } from 'lucide-react';
 import { api, asApiError, uploadFile } from '../../lib/api';
 import { useUiStore } from '../../store/ui';
@@ -30,9 +32,9 @@ type ViewLayout = 'grid' | 'tree';
 
 const FOLDER_PALETTES = [
   {
-    tile: 'bg-liquid-indigo/10 text-liquid-indigo border-liquid-indigo/15',
-    card: 'hover:border-liquid-indigo/25',
-    glow: 'ring-liquid-indigo/30 shadow-liquid-indigo/15',
+    tile: 'bg-blue-100 text-blue-700 border-blue-200',
+    card: 'hover:border-blue-200',
+    glow: 'ring-blue-300 shadow-blue-100',
   },
   {
     tile: 'bg-sky-100 text-sky-700 border-sky-200',
@@ -68,8 +70,11 @@ function folderPalette(id: string) {
 
 export function DocsListPage() {
   const [tree, setTree] = useState<DocTreeResponse | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [q, setQ] = useState('');
-  const [tab, setTab] = useState<Tab>('mine');
+  // 从 URL 读取初始 tab 和 folderId，使进入文件夹的状态可分享/刷新保留
+  const initialTab = (searchParams.get('tab') as Tab) || 'mine';
+  const [tab, setTab] = useState<Tab>(['mine', 'public', 'shared', 'favorites'].includes(initialTab) ? initialTab : 'mine');
   const [layout, setLayout] = useState<ViewLayout>(
     () => (localStorage.getItem('docs.layout') as ViewLayout) || 'grid',
   );
@@ -80,8 +85,8 @@ export function DocsListPage() {
   } | null>(null);
   const [moveTarget, setMoveTarget] = useState<DocNode | null>(null);
   const [moveFolderId, setMoveFolderId] = useState<string | null>(null);
-  const [publicFolderId, setPublicFolderId] = useState<string | null>(null);
-  const [mineFolderId, setMineFolderId] = useState<string | null>(null);
+  const [publicFolderId, setPublicFolderId] = useState<string | null>(() => searchParams.get('folder'));
+  const [mineFolderId, setMineFolderId] = useState<string | null>(() => searchParams.get('folder'));
   const [draggingDocId, setDraggingDocId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [createKind, setCreateKind] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
@@ -96,6 +101,36 @@ export function DocsListPage() {
   const user = useAuthStore((s) => s.user);
   const importInputRef = useRef<HTMLInputElement>(null);
   const createSubmittingRef = useRef(false);
+
+  const syncFolderUrl = useCallback(
+    (nextTab: Tab, folderId: string | null) => {
+      const params: Record<string, string> = {};
+      if (nextTab !== 'mine') params.tab = nextTab;
+      if (folderId) params.folder = folderId;
+      setSearchParams(params, { replace: true });
+    },
+    [setSearchParams],
+  );
+
+  const focusFolderLocation = useCallback(
+    (nextTab: Tab, folderId: string | null) => {
+      setTab(nextTab);
+      setLayout('grid');
+      setQ('');
+      if (nextTab === 'public') {
+        setPublicFolderId(folderId);
+        setMineFolderId(null);
+      } else if (nextTab === 'mine') {
+        setMineFolderId(folderId);
+        setPublicFolderId(null);
+      } else {
+        setMineFolderId(null);
+        setPublicFolderId(null);
+      }
+      syncFolderUrl(nextTab, folderId);
+    },
+    [syncFolderUrl],
+  );
 
   useEffect(() => {
     localStorage.setItem('docs.layout', layout);
@@ -192,7 +227,10 @@ export function DocsListPage() {
     try {
       await api.patch(`/docs/${doc.id}`, { parentId: newParentId });
       await load();
-      showToast('已移动文档', 'success');
+      if (doc.isFolder) {
+        focusFolderLocation(tab, newParentId);
+      }
+      showToast(doc.isFolder ? '已移动文件夹' : '已移动文档', 'success');
     } catch (err) {
       showToast(asApiError(err).error, 'error');
     }
@@ -209,7 +247,10 @@ export function DocsListPage() {
       await api.patch(`/docs/${moveTarget.id}`, { parentId: moveFolderId });
       setMoveTarget(null);
       await load();
-      showToast('已移动到文件夹', 'success');
+      if (moveTarget.isFolder) {
+        focusFolderLocation(tab, moveFolderId);
+      }
+      showToast(moveTarget.isFolder ? '文件夹已移动' : '已移动到文件夹', 'success');
     } catch (err) {
       showToast(asApiError(err).error, 'error');
     }
@@ -269,6 +310,50 @@ export function DocsListPage() {
     }
   };
 
+  const moveToPublic = async (doc: DocNode) => {
+    const ok = await confirmDialog({
+      title: '移动到公共知识库',
+      message: `确认将「${doc.title}」移动到公共知识库？移动后将从私人知识库移除，所有注册用户可查看。`,
+      confirmText: '移动',
+    });
+    if (!ok) return;
+    try {
+      const { data } = await api.post<{ doc: DocNode; movedCount: number }>(`/docs/${doc.id}/move-to-public`);
+      await load();
+      showToast(data.movedCount > 1 ? `已移动 ${data.movedCount} 个文档到公共知识库` : '已移动到公共知识库', 'success');
+      if (doc.isFolder) {
+        focusFolderLocation('public', data.doc.id);
+      } else {
+        setTab('public');
+        navigate(`/app/docs/${data.doc.id}`);
+      }
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
+  const moveToPrivate = async (doc: DocNode) => {
+    const ok = await confirmDialog({
+      title: '移到我的私密空间',
+      message: `确认将「${doc.title}」移到你的私密空间？移动后将从公共知识库移除，仅你的管理员账号可访问。`,
+      confirmText: '转为私密',
+    });
+    if (!ok) return;
+    try {
+      const { data } = await api.post<{ doc: DocNode; movedCount: number }>(`/docs/${doc.id}/move-to-private`);
+      await load();
+      showToast(data.movedCount > 1 ? `已将 ${data.movedCount} 个文档移到私密空间` : '已移到我的私密空间', 'success');
+      if (doc.isFolder) {
+        focusFolderLocation('mine', data.doc.id);
+      } else {
+        setTab('mine');
+        navigate(`/app/docs/${data.doc.id}`);
+      }
+    } catch (err) {
+      showToast(asApiError(err).error, 'error');
+    }
+  };
+
   const allPublicDocs = tree?.public ?? [];
   const publicFolders = useMemo(
     () => allPublicDocs.filter((d) => d.isFolder).sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN')),
@@ -288,6 +373,13 @@ export function DocsListPage() {
     return path;
   }, [allPublicDocs, publicFolderId]);
 
+  useEffect(() => {
+    if (!tree || tab !== 'public' || !publicFolderId) return;
+    if (!allPublicDocs.some((doc) => doc.id === publicFolderId && doc.isFolder)) {
+      focusFolderLocation('public', null);
+    }
+  }, [allPublicDocs, focusFolderLocation, publicFolderId, tab, tree]);
+
   const allMineDocs = tree?.mine ?? [];
   const mineFolders = useMemo(
     () => allMineDocs.filter((d) => d.isFolder).sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN')),
@@ -306,6 +398,13 @@ export function DocsListPage() {
     }
     return path;
   }, [allMineDocs, mineFolderId]);
+
+  useEffect(() => {
+    if (!tree || tab !== 'mine' || !mineFolderId) return;
+    if (!allMineDocs.some((doc) => doc.id === mineFolderId && doc.isFolder)) {
+      focusFolderLocation('mine', null);
+    }
+  }, [allMineDocs, focusFolderLocation, mineFolderId, tab, tree]);
 
   const list = (() => {
     if (!tree) return [];
@@ -356,25 +455,41 @@ export function DocsListPage() {
   };
 
   const openPublicFolder = (folderId: string | null) => {
-    setTab('public');
-    setLayout('grid');
-    setQ('');
-    setPublicFolderId(folderId);
+    focusFolderLocation('public', folderId);
   };
 
   const openMineFolder = (folderId: string | null) => {
-    setTab('mine');
-    setLayout('grid');
-    setQ('');
-    setMineFolderId(folderId);
+    focusFolderLocation('mine', folderId);
   };
 
   const draggableInGrid = (doc: DocNode) =>
     ((tab === 'public' && !!user?.role) || tab === 'mine') &&
     layout === 'grid' &&
     !q &&
-    !doc.isFolder &&
     canManage(doc);
+
+  const moveFolderOptions = useMemo(() => {
+    const folders = tab === 'mine' ? mineFolders : publicFolders;
+    const docs = tab === 'mine' ? allMineDocs : allPublicDocs;
+    if (!moveTarget) return folders;
+    if (!moveTarget.isFolder) {
+      return folders.filter((folder) => folder.id !== moveTarget.id);
+    }
+
+    const blocked = new Set<string>([moveTarget.id]);
+    const stack = [moveTarget.id];
+    while (stack.length) {
+      const currentId = stack.pop()!;
+      docs.forEach((item) => {
+        if (item.parentId === currentId) {
+          blocked.add(item.id);
+          if (item.isFolder) stack.push(item.id);
+        }
+      });
+    }
+
+    return folders.filter((folder) => !blocked.has(folder.id));
+  }, [allMineDocs, allPublicDocs, mineFolders, moveTarget, publicFolders, tab]);
 
   return (
     <div className="py-6 sm:py-8 animate-fade-in-up">
@@ -435,7 +550,8 @@ export function DocsListPage() {
               setCreateKind(tab === 'public' ? 'PUBLIC' : 'PRIVATE');
               setCreateTitle('未命名文档');
               setImportFailures([]);
-              setCreateOpen({ mode: 'create' });
+              const currentFolderId = tab === 'public' ? publicFolderId : mineFolderId;
+              setCreateOpen({ mode: 'create', parentId: currentFolderId });
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-liquid-indigo text-white text-sm font-medium hover:bg-primary transition-colors shadow-md shadow-liquid-indigo/20"
           >
@@ -471,7 +587,12 @@ export function DocsListPage() {
         ] as const).map((t) => (
           <button
             key={t.v}
-            onClick={() => setTab(t.v)}
+            onClick={() => {
+              setTab(t.v);
+              setPublicFolderId(null);
+              setMineFolderId(null);
+              syncFolderUrl(t.v, null);
+            }}
             className={`px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 transition-colors ${
               tab === t.v ? 'bg-white shadow-sm text-text-primary' : 'text-text-secondary hover:text-text-primary'
             }`}
@@ -527,7 +648,7 @@ export function DocsListPage() {
               setImportFailures([]);
               setCreateOpen({ mode: 'folder', parentId: publicFolderId });
             }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-white/70 text-sm text-text-secondary hover:bg-white hover:text-text-primary"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-surface-container-lowest/80 text-sm text-text-secondary hover:bg-surface-container-lowest hover:text-text-primary"
           >
             <FolderPlus size={15} /> 新建文件夹
           </button>
@@ -564,7 +685,7 @@ export function DocsListPage() {
               setImportFailures([]);
               setCreateOpen({ mode: 'folder', parentId: mineFolderId });
             }}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-white/70 text-sm text-text-secondary hover:bg-white hover:text-text-primary"
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-black/10 bg-surface-container-lowest/80 text-sm text-text-secondary hover:bg-surface-container-lowest hover:text-text-primary"
           >
             <FolderPlus size={15} /> 新建文件夹
           </button>
@@ -606,6 +727,8 @@ export function DocsListPage() {
             onDelete={treeSupportsManage ? remove : undefined}
             onMove={canDragMove ? moveDoc : undefined}
             onCopyToPublic={tab === 'mine' ? copyToPublic : undefined}
+            onMoveToPublic={tab === 'mine' ? moveToPublic : undefined}
+            onMoveToPrivate={tab === 'public' && isAdmin ? moveToPrivate : undefined}
           />
         </div>
       ) : (
@@ -684,7 +807,7 @@ export function DocsListPage() {
                   </div>
                   {(tab === 'public' || tab === 'shared') && doc.createdBy && (
                     <div className="text-[11px] text-text-secondary mt-1 truncate">
-                      上传者：{doc.createdBy.name}
+                      {`上传者：${doc.createdBy.name}`}
                     </div>
                   )}
                 </div>
@@ -708,7 +831,7 @@ export function DocsListPage() {
                 </button>
                 {canManage(doc) && (
                   <>
-                    {(tab === 'public' || tab === 'mine') && !doc.isFolder && (
+                    {(tab === 'public' || tab === 'mine') && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -720,7 +843,7 @@ export function DocsListPage() {
                         <Folder size={14} />
                       </button>
                     )}
-                    {tab === 'mine' && (
+                    {tab === 'mine' && !doc.isFolder && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -730,6 +853,30 @@ export function DocsListPage() {
                         title="复制到公共知识库"
                       >
                         <Copy size={14} />
+                      </button>
+                    )}
+                    {tab === 'mine' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void moveToPublic(doc);
+                        }}
+                        className="p-1.5 text-text-secondary hover:text-liquid-indigo hover:bg-liquid-indigo/5 rounded-md"
+                        title="移动到公共知识库"
+                      >
+                        <FolderInput size={14} />
+                      </button>
+                    )}
+                    {tab === 'public' && isAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void moveToPrivate(doc);
+                        }}
+                        className="p-1.5 text-text-secondary hover:text-liquid-indigo hover:bg-liquid-indigo/5 rounded-md"
+                        title="移到我的私密空间"
+                      >
+                        <FolderOutput size={14} />
                       </button>
                     )}
                     <button
@@ -927,9 +1074,7 @@ export function DocsListPage() {
               className="w-full px-3 py-2 rounded-lg border border-black/10 bg-white text-sm"
             >
               <option value="">{tab === 'mine' ? '我的知识库根目录' : '公共知识库根目录'}</option>
-              {(tab === 'mine' ? mineFolders : publicFolders)
-                .filter((folder) => folder.id !== moveTarget.id)
-                .map((folder) => (
+              {moveFolderOptions.map((folder) => (
                   <option key={folder.id} value={folder.id}>
                     {folder.title}
                   </option>
