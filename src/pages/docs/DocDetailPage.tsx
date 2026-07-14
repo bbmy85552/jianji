@@ -91,6 +91,9 @@ export function DocDetailPage() {
   const saveTimerRef = useRef<number | null>(null);
   const draftRef = useRef<{ title?: string; contentJson?: string }>({});
   const updatedAtRef = useRef<string | null>(null);
+  const titleRef = useRef('');
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const conflictRef = useRef(false);
   const uploadBusyRef = useRef(false);
 
   const canWrite = access.canWrite;
@@ -100,43 +103,67 @@ export function DocDetailPage() {
   const flushSave = useCallback(
     async (opts?: { force?: boolean }) => {
       if (!id) return;
-      if (!opts?.force && !draftRef.current.title && !draftRef.current.contentJson) return;
-      setSaveStatus(opts?.force ? 'saving' : 'saving');
-      try {
-        const payload = {
-          ...(opts?.force
-            ? { title, contentJson: editorRef.current?.editor?.getHTML() ?? '' }
-            : draftRef.current),
-          ...(opts?.force ? { force: true } : { expectedUpdatedAt: updatedAtRef.current ?? undefined }),
-        };
-        const { data } = await api.patch<{ doc: DocDetail }>(`/docs/${id}`, payload);
-        draftRef.current = {};
-        updatedAtRef.current = data.doc.updatedAt;
-        setDoc(data.doc);
-        setSaveStatus('saved');
-      } catch (err) {
-        const apiErr = asApiError(err);
-        if (apiErr.code === 'DOC_CONFLICT') {
-          const remoteDoc = (apiErr.details as { doc: DocDetail } | undefined)?.doc;
-          if (remoteDoc) {
-            setConflict({
-              mine: {
-                title,
-                contentJson: editorRef.current?.editor?.getHTML() ?? draftRef.current.contentJson ?? '',
-              },
-              remote: { title: remoteDoc.title, contentJson: remoteDoc.contentJson },
-            });
-            setConflictOpen(true);
-            updatedAtRef.current = remoteDoc.updatedAt;
+      while (saveInFlightRef.current) await saveInFlightRef.current;
+      if (!opts?.force && conflictRef.current) return;
+
+      const draft = { ...draftRef.current };
+      if (!opts?.force && draft.title === undefined && draft.contentJson === undefined) return;
+
+      const request = (async () => {
+        setSaveStatus('saving');
+        try {
+          const payload = {
+            ...(opts?.force
+              ? { title: titleRef.current, contentJson: editorRef.current?.editor?.getHTML() ?? '' }
+              : draft),
+            ...(opts?.force ? { force: true } : { expectedUpdatedAt: updatedAtRef.current ?? undefined }),
+          };
+          const { data } = await api.patch<{ doc: DocDetail }>(`/docs/${id}`, payload);
+
+          // Only remove fields included in this request. Edits made while it was saving stay queued.
+          if (draft.title !== undefined && draftRef.current.title === draft.title) {
+            delete draftRef.current.title;
           }
-          setSaveStatus('conflict');
-          return;
+          if (draft.contentJson !== undefined && draftRef.current.contentJson === draft.contentJson) {
+            delete draftRef.current.contentJson;
+          }
+          updatedAtRef.current = data.doc.updatedAt;
+          setDoc(data.doc);
+          const hasPendingDraft =
+            draftRef.current.title !== undefined || draftRef.current.contentJson !== undefined;
+          setSaveStatus(hasPendingDraft ? 'dirty' : 'saved');
+        } catch (err) {
+          const apiErr = asApiError(err);
+          if (apiErr.code === 'DOC_CONFLICT') {
+            const remoteDoc = (apiErr.details as { doc: DocDetail } | undefined)?.doc;
+            if (remoteDoc) {
+              conflictRef.current = true;
+              setConflict({
+                mine: {
+                  title: titleRef.current,
+                  contentJson: editorRef.current?.editor?.getHTML() ?? draftRef.current.contentJson ?? '',
+                },
+                remote: { title: remoteDoc.title, contentJson: remoteDoc.contentJson },
+              });
+              setConflictOpen(true);
+              updatedAtRef.current = remoteDoc.updatedAt;
+            }
+            setSaveStatus('conflict');
+            return;
+          }
+          setSaveStatus('dirty');
+          showToast(apiErr.error, 'error');
         }
-        setSaveStatus('dirty');
-        showToast(apiErr.error, 'error');
+      })();
+
+      saveInFlightRef.current = request;
+      try {
+        await request;
+      } finally {
+        if (saveInFlightRef.current === request) saveInFlightRef.current = null;
       }
     },
-    [id, showToast, title],
+    [id, showToast],
   );
 
   const scheduleSave = useCallback(() => {
@@ -204,7 +231,9 @@ export function DocDetailPage() {
         setDoc(docRes.data.doc);
         setAccess(docRes.data.access);
         setTitle(docRes.data.doc.title);
+        titleRef.current = docRes.data.doc.title;
         updatedAtRef.current = docRes.data.doc.updatedAt;
+        conflictRef.current = false;
         setConflict(null);
         setConflictOpen(false);
         setIsFavorite(!!treeRes.data.favorites.find((f) => f.id === id));
@@ -225,6 +254,7 @@ export function DocDetailPage() {
   const handleTitle = (v: string) => {
     if (!canWrite) return;
     setTitle(v);
+    titleRef.current = v;
     draftRef.current.title = v;
     scheduleSave();
   };
@@ -468,7 +498,9 @@ export function DocDetailPage() {
       const { data } = await api.get<{ doc: DocDetail }>(`/docs/${id}`);
       setDoc(data.doc);
       setTitle(data.doc.title);
+      titleRef.current = data.doc.title;
       updatedAtRef.current = data.doc.updatedAt;
+      conflictRef.current = false;
       editorRef.current?.setContent(data.doc.contentJson);
     } catch (err) {
       showToast(asApiError(err).error, 'error');
@@ -479,7 +511,13 @@ export function DocDetailPage() {
   const handleOverwriteMine = async () => {
     setConflictOpen(false);
     await flushSave({ force: true });
+    conflictRef.current = false;
     setConflict(null);
+    if (draftRef.current.title !== undefined || draftRef.current.contentJson !== undefined) {
+      setSaveStatus('dirty');
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => void flushSave(), 1000);
+    }
   };
 
   // 冲突处理：丢弃本地修改，加载服务端最新版本
@@ -487,8 +525,10 @@ export function DocDetailPage() {
     if (!conflict) return;
     editorRef.current?.setContent(conflict.remote.contentJson);
     setTitle(conflict.remote.title);
+    titleRef.current = conflict.remote.title;
     draftRef.current = {};
     setDoc((d) => (d ? { ...d, title: conflict.remote.title, contentJson: conflict.remote.contentJson } : d));
+    conflictRef.current = false;
     setConflict(null);
     setConflictOpen(false);
     setSaveStatus('saved');
