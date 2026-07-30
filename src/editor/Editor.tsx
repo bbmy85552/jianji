@@ -28,6 +28,7 @@ interface Props {
   fontFamilies: string[];
   editable?: boolean;
   handlers?: EditorToolbarHandlers;
+  onPasteImages?: (files: File[]) => void | Promise<void>;
   onHeadingsChange?: (headings: EditorHeading[]) => void;
 }
 
@@ -70,11 +71,23 @@ function readHeadings(editor: TiptapEditor | null): EditorHeading[] {
 }
 
 export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
-  { initialContent, onChange, fontFamilies, editable = true, handlers, onHeadingsChange },
+  {
+    initialContent,
+    onChange,
+    fontFamilies,
+    editable = true,
+    handlers,
+    onPasteImages,
+    onHeadingsChange,
+  },
   ref,
 ) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onPasteImagesRef = useRef(onPasteImages);
+  onPasteImagesRef.current = onPasteImages;
+  const editableRef = useRef(editable);
+  editableRef.current = editable;
   const onHeadingsChangeRef = useRef(onHeadingsChange);
   onHeadingsChangeRef.current = onHeadingsChange;
 
@@ -131,6 +144,30 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
         characters: editor.storage.characterCount?.characters() ?? 0,
         words: editor.storage.characterCount?.words() ?? 0,
       });
+    },
+    editorProps: {
+      handlePaste: (_view, event) => {
+        if (!editableRef.current || !onPasteImagesRef.current || !event.clipboardData) {
+          return false;
+        }
+        const itemFiles = Array.from(event.clipboardData.items)
+          .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+          .flatMap((item) => {
+            const file = item.getAsFile();
+            return file ? [file] : [];
+          });
+        const files =
+          itemFiles.length > 0
+            ? itemFiles
+            : Array.from(event.clipboardData.files).filter((file) =>
+                file.type.startsWith('image/'),
+              );
+        if (files.length === 0) return false;
+
+        event.preventDefault();
+        void onPasteImagesRef.current(files);
+        return true;
+      },
     },
   });
   const [counts, setCounts] = useState({ characters: 0, words: 0 });

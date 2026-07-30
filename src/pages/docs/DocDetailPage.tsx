@@ -307,6 +307,12 @@ export function DocDetailPage() {
     }
   };
 
+  const insertPastedImages = async (files: File[]) => {
+    for (const file of files) {
+      await insertImage(file);
+    }
+  };
+
   const insertAttachment = async (file: File) => {
     if (!id || !canWrite || uploadBusyRef.current) return;
     uploadBusyRef.current = true;
@@ -703,6 +709,7 @@ export function DocDetailPage() {
               onHeadingsChange={setHeadings}
               fontFamilies={fonts}
               editable={canWrite}
+              onPasteImages={canWrite ? insertPastedImages : undefined}
               handlers={
                 canWrite && !uploadBusy
                   ? {
