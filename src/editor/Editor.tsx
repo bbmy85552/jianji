@@ -21,6 +21,7 @@ import { LineHeight } from './LineHeight';
 import { FindReplacePanel } from './FindReplacePanel';
 import { EditorToolbar, type EditorToolbarHandlers } from './Toolbar';
 import { DocumentTable, DocumentTableCell, DocumentTableHeader } from './TableExtensions';
+import { looksLikeMarkdown, markdownToHtml } from './markdownPaste';
 
 interface Props {
   initialContent: string;
@@ -147,7 +148,7 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
     },
     editorProps: {
       handlePaste: (_view, event) => {
-        if (!editableRef.current || !onPasteImagesRef.current || !event.clipboardData) {
+        if (!editableRef.current || !event.clipboardData) {
           return false;
         }
         const itemFiles = Array.from(event.clipboardData.items)
@@ -162,10 +163,17 @@ export const RichEditor = forwardRef<RichEditorRef, Props>(function RichEditor(
             : Array.from(event.clipboardData.files).filter((file) =>
                 file.type.startsWith('image/'),
               );
-        if (files.length === 0) return false;
+        if (files.length > 0 && onPasteImagesRef.current) {
+          event.preventDefault();
+          void onPasteImagesRef.current(files);
+          return true;
+        }
+
+        const text = event.clipboardData.getData('text/plain');
+        if (!looksLikeMarkdown(text)) return false;
 
         event.preventDefault();
-        void onPasteImagesRef.current(files);
+        editor?.chain().focus().insertContent(markdownToHtml(text)).run();
         return true;
       },
     },
